@@ -1,0 +1,641 @@
+version: 1
+research_date: "2026-08-17"
+note: >
+  This file defines the complete provider failover architecture for the JARVIS
+  autonomous SWE system. Every model in a critical agent role must have at least
+  one functioning alternative provider configured here before deployment.
+  Health-check intervals and failure thresholds are specified per provider class.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HEALTH CHECK CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+health_check:
+  check_interval_seconds: 60
+  failure_threshold: 3         # 3 consecutive failures → mark provider down
+  recovery_threshold: 2        # 2 consecutive successes → restore provider
+  check_timeout_seconds: 10
+  check_method: "HEAD /health or GET /models (OpenAI-compatible)"
+  alert_channel: "JARVIS dead letter queue + Slack webhook"
+
+  health_check_endpoints:
+    deepseek_official:
+      url: "https://api.deepseek.com/models"
+      method: "GET"
+      expected_status: 200
+    minimax_official:
+      url: "https://api.minimax.io/v1/models"
+      method: "GET"
+      expected_status: 200
+    zai_official:
+      url: "https://api.z.ai/v1/models"
+      method: "GET"
+      expected_status: 200
+    moonshot_official:
+      url: "https://api.moonshot.ai/v1/models"
+      method: "GET"
+      expected_status: 200
+    openrouter:
+      url: "https://openrouter.ai/api/v1/models"
+      method: "GET"
+      expected_status: 200
+    deepinfra:
+      url: "https://api.deepinfra.com/v1/openai/models"
+      method: "GET"
+      expected_status: 200
+    mistral_official:
+      url: "https://api.mistral.ai/v1/models"
+      method: "GET"
+      expected_status: 200
+    groq:
+      url: "https://api.groq.com/openai/v1/models"
+      method: "GET"
+      expected_status: 200
+    fireworks_ai:
+      url: "https://api.fireworks.ai/inference/v1/models"
+      method: "GET"
+      expected_status: 200
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROVIDER STATUS CLASSIFICATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+provider_tiers:
+  tier_1_primary:
+    description: "Direct official APIs — used as primary providers"
+    providers:
+      - deepseek_official
+      - minimax_official
+      - zai_official
+      - moonshot_official
+      - mistral_official
+
+  tier_2_aggregator:
+    description: "OpenRouter and major aggregators — used as first fallback layer"
+    providers:
+      - openrouter
+      - deepinfra
+
+  tier_3_emergency:
+    description: "Specialist inference providers — used as emergency fallback"
+    providers:
+      - groq
+      - cerebras
+      - fireworks_ai
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MODEL FAMILY FALLBACK CHAINS
+# ─────────────────────────────────────────────────────────────────────────────
+# Each model family has a primary provider and a chain of fallbacks.
+# Routes are evaluated in order. First available provider is used.
+
+model_family_chains:
+
+  # ──────────────────────────────────────────────────────────
+  # DeepSeek V4 Pro
+  # Used by: Architect Agent (Portfolio B), Product Agent, Code Review fallback
+  # ──────────────────────────────────────────────────────────
+  deepseek_v4_pro_chain:
+    model_family: "DeepSeek V4 Pro"
+    priority_ordered_providers:
+      - provider: "deepseek_official"
+        model_id: "deepseek-v4-pro-0813"
+        base_url: "https://api.deepseek.com"
+        api_key_env: "DEEPSEEK_API_KEY"
+        notes: "Primary — cheapest off-peak; auto caching"
+      - provider: "openrouter"
+        model_id: "deepseek/deepseek-v4-pro-0813"
+        base_url: "https://openrouter.ai/api/v1"
+        api_key_env: "OPENROUTER_API_KEY"
+        notes: "First fallback — routes to DeepInfra by default; pin to avoid silent routing"
+      - provider: "deepinfra"
+        model_id: "deepseek-ai/DeepSeek-V4-Pro-0813"
+        base_url: "https://api.deepinfra.com/v1/openai"
+        api_key_env: "DEEPINFRA_API_KEY"
+        notes: "Second fallback — $1.30/$2.60; zero-retention"
+      - provider: "fireworks_ai"
+        model_id: "accounts/fireworks/models/deepseek-v4-pro"
+        base_url: "https://api.fireworks.ai/inference/v1"
+        api_key_env: "FIREWORKS_API_KEY"
+        notes: "Tertiary fallback — HIPAA/SOC2; most expensive of the three"
+    failover_trigger: "HTTP 5xx OR timeout > 30s OR HTTP 429"
+    rate_limit_backoff_seconds: 60
+    circuit_breaker:
+      failure_count_to_open: 3
+      open_duration_seconds: 300
+      half_open_test_requests: 1
+
+  # ──────────────────────────────────────────────────────────
+  # DeepSeek V4 Flash
+  # Used by: JARVIS Orchestrator (primary), Security Agent (primary), Documentation Agent (primary)
+  # ──────────────────────────────────────────────────────────
+  deepseek_v4_flash_chain:
+    model_family: "DeepSeek V4 Flash"
+    priority_ordered_providers:
+      - provider: "deepseek_official"
+        model_id: "deepseek-v4-flash-0731"
+        base_url: "https://api.deepseek.com"
+        api_key_env: "DEEPSEEK_API_KEY"
+        notes: "Primary — cheapest; 2,500 concurrency"
+      - provider: "openrouter"
+        model_id: "deepseek/deepseek-v4-flash-0731"
+        base_url: "https://openrouter.ai/api/v1"
+        api_key_env: "OPENROUTER_API_KEY"
+        notes: "Fallback"
+      - provider: "deepinfra"
+        model_id: "deepseek-ai/DeepSeek-V4-Flash-0731"
+        base_url: "https://api.deepinfra.com/v1/openai"
+        api_key_env: "DEEPINFRA_API_KEY"
+        notes: "Second fallback"
+      - provider: "groq"
+        model_id: "gpt-oss-120b"
+        base_url: "https://api.groq.com/openai/v1"
+        api_key_env: "GROQ_API_KEY"
+        notes: "Emergency fallback — different model family; 131K context; fast structured output"
+        model_switch_note: "This is a model family switch (GPT-OSS, not DeepSeek). Log the switch."
+    failover_trigger: "HTTP 5xx OR timeout > 15s OR HTTP 429"
+
+  # ──────────────────────────────────────────────────────────
+  # MiniMax M3
+  # Used by: Frontend, Backend, Database, AI/ML, DevOps, QA, Design agents (Portfolio B primary)
+  # HIGH PRIORITY — most agents depend on this chain
+  # ──────────────────────────────────────────────────────────
+  minimax_m3_chain:
+    model_family: "MiniMax M3"
+    concentration_risk: true
+    concentration_risk_action: "Monitor MiniMax API health every 30s during active coding sessions"
+    priority_ordered_providers:
+      - provider: "minimax_official"
+        model_id: "minimax-m3"
+        base_url: "https://api.minimax.io/v1"
+        api_key_env: "MINIMAX_API_KEY"
+        notes: "Primary — cheapest; auto caching; vision support"
+      - provider: "openrouter"
+        model_id: "minimax/minimax-m3"
+        base_url: "https://openrouter.ai/api/v1"
+        api_key_env: "OPENROUTER_API_KEY"
+        notes: "First fallback — OpenRouter maintains its own serving layer for MiniMax M3"
+      - provider: "moonshot_official"
+        model_id: "kimi-k2.7-code"
+        base_url: "https://api.moonshot.ai/v1"
+        api_key_env: "MOONSHOT_API_KEY"
+        notes: "Emergency fallback — different model (Kimi K2.7 Code); similar OpenHands performance; different vision support"
+        model_switch_note: "This is a model switch. Vision tasks will degrade. Log the switch and check if vision is required."
+        vision_degradation: true
+    failover_trigger: "HTTP 5xx OR timeout > 30s OR HTTP 429"
+    health_check_interval_override_seconds: 30  # More frequent for critical chain
+
+  # ──────────────────────────────────────────────────────────
+  # GLM-5.2 (Z.ai)
+  # Used by: Code Review Agent (primary, Portfolio B), Architect fallback
+  # ──────────────────────────────────────────────────────────
+  glm_5_2_chain:
+    model_family: "GLM-5.2"
+    concentration_risk: true
+    concentration_risk_note: "Z.ai is China-based; latency from US/EU may be elevated"
+    priority_ordered_providers:
+      - provider: "zai_official"
+        model_id: "glm-5.2"
+        base_url: "https://api.z.ai"
+        api_key_env: "ZAI_API_KEY"
+        notes: "Primary — $1.40/$4.40; cached $0.26"
+      - provider: "openrouter"
+        model_id: "z-ai/glm-5.2"
+        base_url: "https://openrouter.ai/api/v1"
+        api_key_env: "OPENROUTER_API_KEY"
+        notes: "Fallback — OpenRouter may have different latency characteristics"
+      - provider: "deepseek_official"
+        model_id: "deepseek-v4-pro-0813"
+        base_url: "https://api.deepseek.com"
+        api_key_env: "DEEPSEEK_API_KEY"
+        notes: "Emergency fallback — DIFFERENT MODEL FAMILY. Loses GLM cross-family independence guarantee. Log and alert."
+        cross_family_independence_lost: true
+        alert_on_use: true
+        alert_message: "ALERT: GLM-5.2 unavailable. Code Review now using DeepSeek V4 Pro. Cross-family review independence is compromised. Consider pausing code review until GLM-5.2 restored."
+    failover_trigger: "HTTP 5xx OR timeout > 30s OR HTTP 429"
+
+  # ──────────────────────────────────────────────────────────
+  # Kimi K2.7 Code (Moonshot)
+  # Used by: Frontend/Backend/Database fallback, AI/ML primary
+  # ──────────────────────────────────────────────────────────
+  kimi_k2_7_code_chain:
+    model_family: "Kimi K2"
+    priority_ordered_providers:
+      - provider: "moonshot_official"
+        model_id: "kimi-k2.7-code"
+        base_url: "https://api.moonshot.ai/v1"
+        api_key_env: "MOONSHOT_API_KEY"
+        notes: "Primary — $0.95/$4.00; cached $0.19; batch 40% off"
+      - provider: "openrouter"
+        model_id: "moonshotai/kimi-k2.7-code"
+        base_url: "https://openrouter.ai/api/v1"
+        api_key_env: "OPENROUTER_API_KEY"
+        notes: "Fallback"
+      - provider: "fireworks_ai"
+        model_id: "accounts/fireworks/models/kimi-k2.6"
+        base_url: "https://api.fireworks.ai/inference/v1"
+        api_key_env: "FIREWORKS_API_KEY"
+        notes: "Second fallback — K2.6 base (not coding-tuned)"
+      - provider: "minimax_official"
+        model_id: "minimax-m3"
+        base_url: "https://api.minimax.io/v1"
+        api_key_env: "MINIMAX_API_KEY"
+        notes: "Emergency fallback — different family (MiniMax); vision available"
+        model_switch_note: "Model family switch. Log accordingly."
+    failover_trigger: "HTTP 5xx OR timeout > 30s OR HTTP 429"
+
+  # ──────────────────────────────────────────────────────────
+  # Kimi K3 (Moonshot — escalation only)
+  # Used by: Code Review Agent high-risk escalation, Architect auth/payments escalation
+  # ──────────────────────────────────────────────────────────
+  kimi_k3_chain:
+    model_family: "Kimi K3"
+    priority_ordered_providers:
+      - provider: "moonshot_official"
+        model_id: "kimi-k3"
+        base_url: "https://api.moonshot.ai/v1"
+        api_key_env: "MOONSHOT_API_KEY"
+        notes: "Primary — $3/$15; always-on max reasoning"
+      - provider: "openrouter"
+        model_id: "moonshotai/kimi-k3"
+        base_url: "https://openrouter.ai/api/v1"
+        api_key_env: "OPENROUTER_API_KEY"
+        notes: "Fallback"
+      - provider: "HALT"
+        notes: "If both Moonshot and OpenRouter are unavailable for Kimi K3 in a HIGH-RISK context, halt the pipeline and require human review instead."
+        action: "halt_and_require_human_review"
+    failover_trigger: "HTTP 5xx OR timeout > 30s OR HTTP 429"
+
+  # ──────────────────────────────────────────────────────────
+  # Devstral Small 2505 (Mistral)
+  # Used by: QA fallback, DevOps fallback, Documentation fallback
+  # ──────────────────────────────────────────────────────────
+  devstral_small_chain:
+    model_family: "Devstral"
+    priority_ordered_providers:
+      - provider: "mistral_official"
+        model_id: "devstral-small-2505"
+        base_url: "https://api.mistral.ai/v1"
+        api_key_env: "MISTRAL_API_KEY"
+        notes: "Primary — $0.10/$0.30; Apache 2.0"
+      - provider: "openrouter"
+        model_id: "mistralai/devstral-small-2505"
+        base_url: "https://openrouter.ai/api/v1"
+        api_key_env: "OPENROUTER_API_KEY"
+        notes: "Fallback"
+    failover_trigger: "HTTP 5xx OR timeout > 20s OR HTTP 429"
+
+  # ──────────────────────────────────────────────────────────
+  # GPT-OSS-120B (Groq / Cerebras)
+  # Used by: JARVIS Orchestrator emergency fallback, Security Agent fallback
+  # ──────────────────────────────────────────────────────────
+  gpt_oss_120b_chain:
+    model_family: "GPT-OSS-120B"
+    priority_ordered_providers:
+      - provider: "groq"
+        model_id: "gpt-oss-120b"
+        base_url: "https://api.groq.com/openai/v1"
+        api_key_env: "GROQ_API_KEY"
+        notes: "Primary — 476 t/s; $0.35/$0.75; 131K context; all 11 models support tools+JSON"
+      - provider: "cerebras"
+        model_id: "gpt-oss-120b"
+        base_url: "https://inference.cerebras.ai/v1"
+        api_key_env: "CEREBRAS_API_KEY"
+        notes: "Fallback — ~3,000 t/s (wafer-scale); same pricing; 131K context"
+    failover_trigger: "HTTP 5xx OR timeout > 15s OR HTTP 429"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCENARIO-BASED FAILOVER PLAYBOOKS
+# ─────────────────────────────────────────────────────────────────────────────
+
+failover_playbooks:
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 1: DeepSeek API Total Outage
+  # Impact: Architect Agent (Portfolio B primary), JARVIS Orchestrator, Security, Docs
+  # ──────────────────────────────────────────────────────────
+  deepseek_api_outage:
+    trigger: "deepseek_official health check fails 3 consecutive checks"
+    impact_severity: "HIGH"
+    affected_agents:
+      - "Architect Agent (Portfolio B primary)"
+      - "JARVIS Orchestrator (Portfolio B primary)"
+      - "Product Agent (Portfolio B primary)"
+      - "Security Agent (Portfolio B primary)"
+      - "Documentation Agent (Portfolio B primary)"
+      - "Backend/Frontend/Database Agent escalation target"
+    actions:
+      1_immediate:
+        - "Route all DeepSeek V4 Pro requests to DeepInfra (deepseek-ai/DeepSeek-V4-Pro-0813)"
+        - "Route all DeepSeek V4 Flash requests to OpenRouter (deepseek/deepseek-v4-flash-0731)"
+        - "Alert JARVIS operator via dead letter queue + webhook"
+      2_if_deepinfra_also_unavailable:
+        - "Architect Agent: switch to GLM-5.2 on Z.ai for architecture tasks"
+        - "JARVIS Orchestrator: switch to GPT-OSS-120B on Groq for routing tasks"
+        - "Security Agent: switch to GPT-OSS-120B on Groq for structured parsing"
+      3_if_all_deepseek_chains_down:
+        - "Pause all new agent sessions"
+        - "Complete in-flight sessions if within 5 turns of completion"
+        - "Trigger human escalation for all pending high-priority tasks"
+    pricing_impact: "DeepInfra is 97–100% more expensive than DeepSeek API off-peak; expect 2x cost increase during outage"
+    max_outage_tolerance: "4 hours before manual intervention required"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 2: MiniMax API Total Outage
+  # Impact: All coding agents (Portfolio B default)
+  # CRITICAL — affects 7 of 13 agents
+  # ──────────────────────────────────────────────────────────
+  minimax_api_outage:
+    trigger: "minimax_official health check fails 3 consecutive checks"
+    impact_severity: "CRITICAL"
+    affected_agents:
+      - "Frontend Agent (primary)"
+      - "Backend Agent (primary)"
+      - "AI/ML Agent (primary)"
+      - "Database Agent (primary)"
+      - "DevOps Agent (primary)"
+      - "QA Agent (primary)"
+      - "Design Agent (primary)"
+    actions:
+      1_immediate:
+        - "Switch all MiniMax M3 requests to OpenRouter (minimax/minimax-m3)"
+        - "Alert JARVIS operator"
+      2_if_openrouter_also_down_for_minimax:
+        - "Frontend/Backend/Database/AI_ML/DevOps: switch to Kimi K2.7 Code on Moonshot API"
+        - "QA Agent: switch to Devstral Small on Mistral API (vision lost — document limitation)"
+        - "Design Agent: switch to Kimi K2.5 on Moonshot API (vision retained)"
+        - "Alert: vision capability degraded for QA Agent during outage"
+      3_if_moonshot_also_unavailable:
+        - "Pause all OpenHands coding sessions"
+        - "JARVIS Orchestrator continues running (not affected)"
+        - "Code Review continues (GLM-5.2 unaffected)"
+        - "Trigger human escalation for all pending coding tasks"
+        - "Estimated recovery time: check minimax.io status page"
+    pricing_impact: "Kimi K2.7 Code is 3× more expensive than MiniMax M3 for same workload"
+    max_outage_tolerance: "2 hours before manual intervention required"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 3: Z.ai API Outage (GLM family)
+  # Impact: Code Review Agent (primary), Architect fallback
+  # ──────────────────────────────────────────────────────────
+  zai_outage:
+    trigger: "zai_official health check fails 3 consecutive checks"
+    impact_severity: "HIGH"
+    affected_agents:
+      - "Code Review Agent (primary)"
+      - "Architect Agent (fallback)"
+    actions:
+      1_immediate:
+        - "Code Review Agent: switch to OpenRouter (z-ai/glm-5.2)"
+        - "Monitor whether OpenRouter's Z.ai routing is also affected"
+      2_if_openrouter_zai_also_down:
+        - "Code Review Agent: switch to DeepSeek V4 Pro on DeepSeek API"
+        - "CRITICAL: Cross-family independence is COMPROMISED — log this event"
+        - "Alert: 'Code Review is now same-family as implementation for DeepSeek-authored code'"
+        - "Recommendation: Pause new high-risk PRs (auth/RLS/payments) until GLM restored"
+      3_sustained_outage:
+        - "If GLM-5.2 unavailable for > 2 hours, require human code review for high-risk PRs"
+        - "Standard (non-high-risk) PRs may proceed with DeepSeek V4 Pro as emergency reviewer"
+    max_outage_tolerance: "2 hours for standard PRs; 0 minutes for high-risk PRs (immediate human review)"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 4: Moonshot API Outage (Kimi family)
+  # Impact: AI/ML Agent primary, Kimi K3 escalation, design/QA fallback
+  # ──────────────────────────────────────────────────────────
+  moonshot_outage:
+    trigger: "moonshot_official health check fails 3 consecutive checks"
+    impact_severity: "MEDIUM"
+    affected_agents:
+      - "AI/ML Agent (primary)"
+      - "Kimi K3 escalation chain"
+      - "Design Agent vision fallback"
+      - "QA Agent vision fallback"
+    actions:
+      1_immediate:
+        - "AI/ML Agent: switch to OpenRouter (moonshotai/kimi-k2.7-code); if unavailable, MiniMax M3"
+        - "Kimi K3 escalation: switch to OpenRouter (moonshotai/kimi-k3); if unavailable, HALT + human review"
+      2_if_kimi_k3_required_and_unavailable:
+        - "HIGH-RISK escalation: pause and require human code review"
+        - "Document: high-risk PR blocked pending Moonshot recovery or human review"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 5: OpenRouter Outage
+  # Impact: All fallback chains that rely on OpenRouter
+  # ──────────────────────────────────────────────────────────
+  openrouter_outage:
+    trigger: "openrouter health check fails 3 consecutive checks"
+    impact_severity: "MEDIUM"
+    affected_agents:
+      - "All agents (OpenRouter is fallback layer)"
+    actions:
+      1_immediate:
+        - "Skip OpenRouter in all fallback chains"
+        - "Move to tier_3_emergency providers (DeepInfra, Groq, Cerebras, Fireworks)"
+        - "Alert: fallback chain depth reduced; monitor primary provider health closely"
+      2_primary_providers_still_available:
+        - "Operations continue with primary providers; just losing fallback layer"
+      3_if_primary_also_down:
+        - "Emergency fallback to DeepInfra / Groq / Cerebras for respective model families"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 6: Rate Limit Hit (HTTP 429)
+  # ──────────────────────────────────────────────────────────
+  rate_limit_hit:
+    trigger: "HTTP 429 from any provider"
+    actions:
+      deepseek_official_429:
+        - "Wait 60s (off-peak rate limit reset)"
+        - "If during peak hours (01:00–04:00 or 06:00–10:00 UTC): switch to DeepInfra immediately"
+        - "If recurring: check if concurrency limit (500 for V4 Pro, 2500 for V4 Flash) is being exceeded"
+      minimax_official_429:
+        - "Switch to standard → priority tier (1.5× cost) for active sessions"
+        - "If still 429: route new requests to OpenRouter/MiniMax M3"
+      moonshot_429:
+        - "Apply batch mode (40% discount) for non-urgent K2.x tasks"
+        - "Route high-priority tasks to primary provider"
+    backoff_strategy: "exponential"
+    initial_backoff_seconds: 1
+    max_backoff_seconds: 60
+    max_retry_attempts: 3
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 7: Context Window Exceeded
+  # ──────────────────────────────────────────────────────────
+  context_window_exceeded:
+    trigger: "Input token count exceeds model's recommended context window"
+    strategy:
+      step_1: "Truncate RAG context: remove oldest-retrieved chunks first; preserve task spec and system prompt"
+      step_2: "If still exceeds limit: switch to model with larger confirmed context window"
+      step_3: "If exceeds 1M tokens: split task into subtasks; restructure; alert human"
+    context_window_routing:
+      under_60k: "Any primary model"
+      between_60k_and_131k: "Exclude Devstral Small (131K max — too risky at boundary)"
+      between_131k_and_262k: "Use DeepSeek V4 Pro, MiniMax M3, or GLM-5.2"
+      between_262k_and_400k: "Use DeepSeek V4 Pro, MiniMax M3, GLM-5.2 (documented reliable to 400K), Kimi K3"
+      between_400k_and_1m: "Use DeepSeek V4 Pro (1M confirmed), MiniMax M3 (512K guaranteed; 1M possible), Kimi K3 (1M)"
+      over_1m: "Split task; alert human"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 8: Tool-Call Format Incompatibility
+  # ──────────────────────────────────────────────────────────
+  tool_call_incompatibility:
+    trigger: "JSON parse error on tool call; malformed tool schema returned"
+    actions:
+      - "Log the malformed response with model + provider identifiers"
+      - "Switch to fallback provider for the same model"
+      - "If fallback provider also produces malformed tool calls: escalate to fallback model"
+      - "If all providers for model produce malformed tool calls: route to dead letter queue + alert"
+    notes:
+      - "DeepInfra documents K2 as top tool-calling accuracy; use as fallback for tool-call issues"
+      - "Some models require complete assistant message including reasoning content for multi-turn tool calls (Kimi K3)"
+      - "Check provider-specific stop-sequence behavior before debugging tool-call issues"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 9: Model Deprecation Notice
+  # ──────────────────────────────────────────────────────────
+  model_deprecation:
+    trigger: "Provider announces model deprecation OR changelog shows new pinned version"
+    actions:
+      immediate:
+        - "Pin to current dated model ID immediately (e.g., deepseek-v4-pro-0813)"
+        - "Add deprecation date to JARVIS calendar/alert"
+        - "Evaluate successor model against bake-off plan"
+      30_days_before_deprecation:
+        - "Run bake-off tasks for successor model"
+        - "Update model-registry.proposed.yaml with new model entry"
+        - "Update model-routing.proposed.yaml with new default_model_id"
+        - "Test provider failback chain with new model IDs"
+      7_days_before_deprecation:
+        - "Complete migration to successor model in staging"
+        - "Monitor for behavioral regressions (same tasks, new model)"
+      deprecation_date:
+        - "Cut over to new model ID in production"
+    known_upcoming_deprecations:
+      - model: "deepseek-v3 / deepseek-r1 series"
+        deprecation_date: "2026-10-10"
+        source: "SRC-032 (DeepSeek QwenCloud deprecation notice)"
+        action: "These are NOT primary JARVIS models; no action required"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 10: Silent Model Checkpoint Upgrade
+  # ──────────────────────────────────────────────────────────
+  silent_checkpoint_upgrade:
+    trigger: "Behavioral regression detected in production (test success rate drops > 10%)"
+    prevention: "Always use pinned dated model IDs in production"
+    response:
+      - "Check if provider changed behavior for the undated model slug"
+      - "Compare outputs between pinned version and current version"
+      - "If regression confirmed: stay on pinned version; open provider support ticket"
+      - "If no regression: update pinned version to new checkpoint"
+    monitored_models:
+      - "deepseek/deepseek-v4-pro → use deepseek-v4-pro-0813"
+      - "deepseek/deepseek-v4-flash → use deepseek-v4-flash-0731"
+      - "z-ai/glm-5.2 → monitor for GLM-5.3 automatic migration"
+
+  # ──────────────────────────────────────────────────────────
+  # Scenario 11: Total Multi-Provider Outage (All Primary Providers Down)
+  # ──────────────────────────────────────────────────────────
+  total_outage_emergency:
+    trigger: "DeepSeek, MiniMax, Z.ai, and Moonshot all fail health checks simultaneously"
+    impact_severity: "CRITICAL"
+    probability: "Very Low"
+    actions:
+      1_check_openrouter:
+        - "Test OpenRouter with any available model family"
+        - "If OpenRouter routing is functional, route all agents through OpenRouter"
+      2_route_to_emergency_providers:
+        - "JARVIS Orchestrator: GPT-OSS-120B on Groq"
+        - "All coding agents: GPT-OSS-120B or Llama 3.3 70B on Groq/Cerebras (limited capability)"
+        - "Code Review: DeepSeek V4 Pro on Fireworks if available; otherwise human review"
+        - "Alert: 'JARVIS degraded mode — limited agent capability'"
+      3_degraded_mode_limitations:
+        - "Context window reduced to 131K (Groq limit)"
+        - "Vision tasks (Design Agent, QA Agent) cannot proceed"
+        - "OpenHands capability significantly reduced with GPT-OSS vs primary models"
+        - "Only proceed with bounded, low-risk tasks in degraded mode"
+      4_escalate_to_human:
+        - "All high-risk tasks (auth, payments, RLS, production migrations) pause immediately"
+        - "Notify human operators with task queue status"
+        - "Estimated recovery: check all provider status pages simultaneously"
+    post_recovery:
+      - "Replay queued tasks in priority order"
+      - "Audit all tasks completed in degraded mode for quality"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROVIDER API KEY ENVIRONMENT VARIABLES
+# ─────────────────────────────────────────────────────────────────────────────
+
+required_environment_variables:
+  primary_providers:
+    DEEPSEEK_API_KEY:
+      provider: "DeepSeek"
+      required: true
+      obtain: "https://platform.deepseek.com/api_keys"
+    MINIMAX_API_KEY:
+      provider: "MiniMax"
+      required: true
+      obtain: "https://platform.minimax.io/"
+    ZAI_API_KEY:
+      provider: "Z.ai (Zhipu)"
+      required: true
+      obtain: "https://api.z.ai/"
+    MOONSHOT_API_KEY:
+      provider: "Moonshot AI"
+      required: true
+      obtain: "https://platform.moonshot.ai/"
+    MISTRAL_API_KEY:
+      provider: "Mistral AI"
+      required: true
+      obtain: "https://console.mistral.ai/"
+
+  fallback_providers:
+    OPENROUTER_API_KEY:
+      provider: "OpenRouter"
+      required: true
+      obtain: "https://openrouter.ai/keys"
+    DEEPINFRA_API_KEY:
+      provider: "DeepInfra"
+      required: true
+      obtain: "https://deepinfra.com/"
+    GROQ_API_KEY:
+      provider: "Groq"
+      required: true
+      obtain: "https://console.groq.com/"
+
+  optional_providers:
+    FIREWORKS_API_KEY:
+      provider: "Fireworks AI"
+      required: false
+      obtain: "https://fireworks.ai/"
+      rationale: "HIPAA/SOC2 compliance use cases"
+    CEREBRAS_API_KEY:
+      provider: "Cerebras"
+      required: false
+      obtain: "https://inference.cerebras.ai/"
+      rationale: "Ultra-fast structured output fallback"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COST MONITORING AND BUDGET ALERTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+cost_monitoring:
+  budget_alert_thresholds:
+    daily_spend_warning_usd: 20.0
+    daily_spend_critical_usd: 50.0
+    monthly_spend_warning_usd: 300.0
+    monthly_spend_critical_usd: 500.0
+
+  price_increase_detection:
+    check_interval_hours: 24
+    alert_if_price_increases_by_percent: 50
+    source: "Compare against prices in config/model-registry.proposed.yaml"
+    action_on_alert: "Notify operator; evaluate switching to cheaper provider or portfolio"
+
+  per_provider_monitoring:
+    deepseek_official:
+      concern: "Pricing increased 51-1100% on 2026-08-16; monitor closely"
+      check_interval_hours: 24
+    minimax_official:
+      concern: "Community License may add usage restrictions; verify annually"
+    zai_official:
+      concern: "China-based provider; China regulatory changes may affect availability"

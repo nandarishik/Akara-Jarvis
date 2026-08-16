@@ -32,6 +32,7 @@ This is not "add Sentry." V1 observability is logs + health + platform dashboard
 7. The first real run is a **non-todo** product idea (still small). A second copy of the Phase 1 todo app does not count.
 8. Observability V2 (Prometheus, Grafana, Loki, Jaeger, Sentry) is **forbidden** in this phase.
 9. Task timeout must **fire** in a drill (Phase 1 only required it to be configured).
+10. LLM **provider failover** follows `config/provider-fallbacks.yaml`. MiniMax outage is **critical** (seven coding agents). Router must walk the chain on 5xx/429/timeout; missing API keys skip that hop. A full health-check daemon can land later; failover on request failure is required when multi-provider routing is live.
 
 ---
 
@@ -103,7 +104,7 @@ Pick one intent that needs **frontend + backend + database** and at least one au
 
 - Agent timing / race on parallel FE/BE  
 - Context too large  
-- Wrong model tier  
+- Wrong model / provider (check Portfolio B routing + failover logs)  
 - Flaky QA  
 - Contract drift  
 

@@ -84,13 +84,14 @@ def log_llm_call(
     completion_tokens: int,
     usd_estimate: float,
     would_pause: bool,
+    source: str = "openrouter",
 ) -> None:
     conn.execute(
         """
         INSERT INTO llm_calls (
           timestamp, task_id, correlation_id, agent, model, source,
           prompt_tokens, completion_tokens, usd_estimate, would_pause
-        ) VALUES (%s, %s, %s, %s, %s, 'openrouter', %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             datetime.now(timezone.utc),
@@ -98,6 +99,7 @@ def log_llm_call(
             correlation_id,
             agent,
             model,
+            source,
             prompt_tokens,
             completion_tokens,
             Decimal(str(round(usd_estimate, 6))),

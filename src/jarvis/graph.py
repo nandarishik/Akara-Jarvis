@@ -121,7 +121,7 @@ def build_graph(settings: Settings, conn):
             return {**state, "result": result.model_dump(mode="json")}
 
         worker = (
-            OpenHandsWorker()
+            OpenHandsWorker(settings, conn)
             if settings.worker == "openhands"
             else FallbackWorker(router, settings.task_timeout_sec)
         )

@@ -7,7 +7,7 @@ name = "jarvis"
 version = "0.1.0"
 description = "JARVIS Phase 1 — orchestrator core"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
   "langgraph>=0.2.45",
   "langgraph-checkpoint-postgres>=2.0.0",
@@ -16,7 +16,11 @@ dependencies = [
   "pydantic-settings>=2.6.0",
   "httpx>=0.27.0",
   "python-dotenv>=1.0.1",
+  "PyYAML>=6.0",
   "typer>=0.12.0",
+  "openhands-sdk>=1.0.0",
+  "openhands-tools>=1.0.0",
+  "openhands-workspace>=1.0.0",
 ]
 
 [project.optional-dependencies]

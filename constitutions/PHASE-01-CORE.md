@@ -25,7 +25,7 @@ If this loop does not run on a real machine, no later phase matters.
 2. Task state is a **DAG** persisted in PostgreSQL via LangGraph's checkpointer. Memory-only graphs are illegal.
 3. Coding work happens through an **execution worker** (OpenHands preferred) with filesystem scope, not by pasting code snippets into chat.
 4. Agents communicate through **git artifacts**, not chat between agents.
-5. Every LLM call goes through the **model router** (V1: OpenRouter only). Record model, source, tokens, cost. Agents do not call vendor APIs directly. Phase 9 may add a local backend; this bullet does not forbid that.
+5. Every LLM call goes through the **model router** (V1: multi-provider hosted; OpenRouter as aggregator fallback). Record model, **source = provider id**, tokens, cost. Agents do not call vendor APIs directly. Phase 9 may add a local backend; this bullet does not forbid that.
 6. Every task has a **token budget**. Exhaustion requires an explicit JARVIS decision, not silent overrun.
 7. Worker filesystem is scoped to the **product** workspace (`projects/{name}/` or documented root). JARVIS is not a general Windows administrator.
 8. Kill switch: stopping the JARVIS process / compose stack stops workers. No orphan containers as the happy path.
@@ -41,7 +41,7 @@ If this loop does not run on a real machine, no later phase matters.
 | LangGraph orchestrator | Task graph, status machine (`pending \| in_progress \| completed \| failed \| blocked`), dependency resolution |
 | PostgreSQL checkpointer | Every state transition saved. Restart resumes from last checkpoint |
 | OpenHands (or documented fallback runner) | Docker worker, workspace mount, process lifecycle owned by JARVIS |
-| Model router | Tier 0–3 per index **C3**; V1 transport = OpenRouter; log every call |
+| Model router | Agent map from `config/model-routing.yaml` (Portfolio B); provider chains in `config/provider-fallbacks.yaml`; log every call with provider `source` |
 | Two-root scaffold | Platform package + product tree in §5 |
 | Proof of life | `jarvis build "<X>"` → JARVIS assigns **one** agent → code or spec lands in a branch/PR |
 
@@ -142,14 +142,16 @@ If `blocked`, `needs_from` is mandatory (`agent`, `artifact`, `reason`).
 
 ## 7. Model routing (minimum viable)
 
-| Tier | Use in Phase 1 |
-|---|---|
-| 0 | Implementation / grunt (Composer 2.5 class) |
-| 1 | Cheap coding / parsing |
-| 2 | JARVIS routing decisions |
-| 3 | Do not use in Phase 1 except Architect if you run a real Architect node |
+Dispatch by **agent role** (not env `TIER*_MODEL` slots). Phase 1 proof uses the **backend** agent entry from Portfolio B:
 
-Log: timestamp, task_id, correlation_id, agent, model, source (`openrouter` in V1), prompt tokens, completion tokens, USD estimate.
+| Agent (Phase 1) | Primary | Fallback path |
+|---|---|---|
+| Backend (OpenHands / fallback worker) | MiniMax M3 | OpenRouter MiniMax → Kimi / V4 Pro escalate |
+| JARVIS routing (when used) | DeepSeek V4 Flash | OpenRouter / GPT-OSS-120B |
+
+OpenHands model string comes from `openhands_settings` in `config/model-routing.yaml`.
+
+Log: timestamp, task_id, correlation_id, agent, model, source (**provider id**, e.g. `minimax_official` / `openrouter`), prompt tokens, completion tokens, USD estimate.
 
 Daily spend tracking can be a table + log line. Pause logic can be stubbed if it **records** that it would have paused.
 
@@ -214,7 +216,7 @@ jarvis build "Build a todo API with one authenticated list endpoint"
 1. Monorepo scaffold + git (`develop` branch exists)
 2. Postgres + LangGraph checkpointer
 3. Task DAG + assignment (even if the "agent" is a dummy node)
-4. Model router + OpenRouter transport + tier field on tasks
+4. Model router + multi-provider transport + agent map + tier field on tasks
 5. Worker integration (OpenHands, then fallback if blocked)
 6. Wire dummy/real agent → branch → PR
 7. Proof of life run, then fix seams
@@ -225,7 +227,7 @@ jarvis build "Build a todo API with one authenticated list endpoint"
 
 - [ ] Postgres checkpointer proven (restart retains state)
 - [ ] Worker can create a branch and commit inside scope
-- [ ] Model-router calls are logged with cost (OpenRouter in V1)
+- [ ] Model-router calls are logged with cost and provider `source`
 - [ ] Task JSON in / JSON out contracts implemented (`intent_id`, `correlation_id`)
 - [ ] Platform root and product tree both exist (C1)
 - [ ] Artifact directories exist
@@ -242,7 +244,7 @@ jarvis build "Build a todo API with one authenticated list endpoint"
 | Graph runs once then amnesia | Checkpointer not actually attached |
 | Worker "succeeds" with no git changes | Lifecycle / working directory wrong |
 | Windows + Docker mount empty | WSL2 path / volume bind |
-| Token log missing | Calls bypassing OpenRouter wrapper |
+| Token log missing | Calls bypassing the model router |
 | Hung task | No timeout; add hard task timeout in this phase (default 30 min) |
 
 ---

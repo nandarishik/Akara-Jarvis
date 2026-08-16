@@ -52,10 +52,9 @@ class FallbackWorker:
         for _ in range(24):
             try:
                 reply, used = self.router.complete(
-                    tier=task.model_tier,
+                    agent=task.agent,
                     messages=history,
                     task_id=task.task_id,
-                    agent=task.agent,
                     correlation_id=task.correlation_id,
                     budget_remaining=remaining,
                 )

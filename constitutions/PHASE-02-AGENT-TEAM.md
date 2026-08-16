@@ -36,23 +36,27 @@ Install every agent as a LangGraph node with a **role prompt**, **scope**, **def
 
 A node that only logs "not implemented" is illegal in Phase 2 **except** as a temporary stub lasting **less than one working day**. By Exit Gate, every role below has a prompt and can produce its artifact type (even if quality will improve later).
 
-| Agent | Default tier | Escalation | Primary outputs |
-|---|---|---|---|
-| JARVIS | 2 | — | Task graph, assignment, budgets, gates |
-| Product | 2 | Ambiguity → 3 | `docs/product/` PRD, stories, NFRs, edges |
-| Architect | **always 3** | — | `docs/architecture/`, `docs/api/` OpenAPI, schema, ADRs |
-| Design | 1 | — | `docs/design/` flows, tokens JSON, a11y, **library selection** |
-| Frontend | 0 | Complex state/perf → 2 | `frontend/` |
-| Backend | 0 | Auth/security → 2; prod debug → 3 | `backend/` |
-| AI/ML | 2 | — | `ai/` versioned prompts + evals |
-| Database | 0 | Index/RLS → 2; prod migration → 3 | `database/`, migrations |
-| Code Review | 2 | Auth/payments/deletion → 3 | Structured verdict on every PR |
-| QA | 0 | New strategy → 2 | `tests/e2e/` (generation may start; **execution against QC is Phase 4**) |
-| Security | 0 | — | Tool orchestration (execution in Phase 4; prompt + report schema now) |
-| DevOps | 0 | New infra → 2 | `infra/`, workflows (files; **live CI is Phase 3**) |
-| Documentation | 0 | — | README, CHANGELOG, runbook (full auto-on-deploy is Phase 7) |
+| Agent | Primary (Portfolio B) | Fallback / escalate | OpenHands | Tier class |
+|---|---|---|---|---|
+| JARVIS | DeepSeek V4 Flash | GPT-OSS-120B (Groq) | No | 1–2 |
+| Product | DeepSeek V4 Pro | Kimi K2.6 → GLM-5.2 | No | 2→3 |
+| Architect | DeepSeek V4 Pro | GLM-5.2 → Kimi K3 | No | **always 2–3** |
+| Design | MiniMax M3 (vision) | Kimi K2.5 | No | 0–1 |
+| Frontend | MiniMax M3 | Kimi → V4 Pro | Yes | 0→2 |
+| Backend | MiniMax M3 | Kimi → V4 Pro; auth → V4 Pro + Kimi K3 review | Yes | 0→3 |
+| AI/ML | Kimi K2.6 | MiniMax → V4 Pro | Yes | 2 |
+| Database | MiniMax M3 | Kimi → V4 Pro; prod migration / RLS escalate | Yes | 0→3 |
+| Code Review | GLM-5.2 | V4 Pro; high-risk → Kimi K3 | No | 2→3 |
+| QA | MiniMax M3 (vision) | Devstral → V4 Pro | Yes | 0→2 |
+| Security | DeepSeek V4 Flash | GPT-OSS-120B | No | 0–1 |
+| DevOps | MiniMax M3 | Devstral → V4 Pro | Yes | 0→2 |
+| Documentation | DeepSeek V4 Flash | Devstral | No | 0 |
 
-Plus the **execution engine** is still OpenHands (or Phase 1 fallback), not a 15th "personality." Different agents = different prompts + scopes, same engine.
+Authoritative IDs live in `config/model-routing.yaml`. Plus the **execution engine** is still OpenHands (or Phase 1 fallback), not a 15th "personality."
+
+**Cross-family review:** Code Review’s model family **must differ** from the implementing agent’s family. High-risk paths (auth, payments, RLS, secrets, prod migrations, CI credentials) require escalation reviewer (Kimi K3) and may require human approval.
+
+**Risk classifier:** JARVIS evaluates path/keyword patterns from `config/model-routing.yaml` `risk_classifier` before dispatch.
 
 ---
 

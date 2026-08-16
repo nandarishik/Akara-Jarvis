@@ -94,16 +94,16 @@ JARVIS + Product, Architect, Design, Frontend, Backend, AI/ML, Database, Code Re
 
 ### C3 — Model tier integers (authoritative)
 
-`SWE TEAM.MD` §3 sometimes calls Opus “Tier 1” and Composer “Tier 3”. **Ignore that.** Use §8:
+Tiers remain **budget / escalation classes**. Dispatch resolves by **agent + risk** from `config/model-routing.yaml` (Portfolio B default), not by proprietary Opus/Sonnet/Composer names in `SWE TEAM.MD` §3/§8 prose.
 
-| Tier | Meaning | Examples |
+| Tier | Meaning | Portfolio B examples |
 |---|---|---|
-| **0** | Free/grunt | Composer 2.5 class, local Ollama (Phase 9) |
-| **1** | Cheap | Haiku / GPT-4o-mini class |
-| **2** | Mid | Sonnet / JARVIS / Code Review default |
-| **3** | Premium | Opus / o3 class — Architect always; Product if ambiguous |
+| **0** | Grunt / implementation | MiniMax M3, Devstral Small; Phase 9 local Ollama only on trigger |
+| **1** | Cheap structured / vision-light | V4 Flash, Qwen3.6-27B vision fallback |
+| **2** | Mid reasoning / review default | DeepSeek V4 Pro, GLM-5.2 (Code Review) |
+| **3** | Premium escalate | Kimi K3 (high-risk review / auth-arch escalate) |
 
-Every LLM call goes through the **model router**. V1 backend is OpenRouter. Phase 9 may add local for Tier 0. Agents never call a vendor SDK with a hardcoded model.
+Every LLM call goes through the **model router**. V1 transport = **multi-provider hosted** (DeepSeek, MiniMax, Z.ai, Moonshot, Mistral primary; **OpenRouter** and DeepInfra/Groq as failover). Phase 9 may add local for Tier 0. Agents never hardcode a vendor SDK + model.
 
 ### C4 — Retries are per issue, not per mood
 
@@ -132,7 +132,7 @@ A row in the deployment table: git tag, SHA, prod URLs, migration ids if any, **
 Copied from `SWE TEAM.MD` Design Principles. These cannot be waived by a phase.
 
 1. **Open source or don't use it** — exceptions: Vercel, Railway, Supabase, OpenRouter.
-2. **Cheap models do grunt work** — Composer 2.5 / Tier 0 for implementation from detailed plans.
+2. **Cheap models do grunt work** — MiniMax M3 / Devstral-class Tier 0 for implementation from detailed plans (Portfolio B).
 3. **Plans before code** — no engineering until Product acceptance criteria and Architect contracts exist (Phase 1 may use a stub Product/Architect for proof of life only).
 4. **Agents don't trust themselves** — author ≠ reviewer; QA hits the running app; Security runs tools.
 5. **Fail fast, fix, escalate** — max 3 retries, then human. No infinite loops. No silent failures.
@@ -202,3 +202,4 @@ High-risk (schema, auth, payments, deletion) **never** auto-ships without a huma
 | 2026-08-16 | Initial eight V1 constitutions |
 | 2026-08-16 | V2 phases 9–14 added |
 | 2026-08-16 | Consistency pass: 13 roles, canonical tiers, two-root law, router vs OpenRouter, retry identity, healthz/smoke, always-on files, Gitleaks default, release counting |
+| 2026-08-17 | Model Research Portfolio B: C3 open-weight examples; multi-provider router; Composer removed |

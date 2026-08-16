@@ -11,9 +11,11 @@
 
 **Start this phase when at least one is true:**
 
-1. OpenRouter free/cheap-tier **rate limits** block JARVIS on a normal operate week, or  
+1. Hosted provider **rate limits** (or multi-provider outage) block JARVIS on a normal operate week, or  
 2. You have a **hard requirement** for zero-cost Tier 0 (electricity only), or  
 3. Embedding calls are a measurable cost/latency problem and Sentence Transformers on-box is cheaper.
+
+**Note:** Hosted open-weight Portfolio B (MiniMax / DeepSeek / GLM) usually removes the **cost** reason to self-host. Do not start Phase 9 only to chase cheaper tokens while Portfolio B is healthy.
 
 **Do not start** because GPUs are interesting.
 
@@ -30,9 +32,9 @@ Optional: self-host embeddings via [Sentence Transformers](https://github.com/UK
 ## 2. Non-negotiables
 
 1. Open source inference stacks only (Ollama / vLLM). No new proprietary model-host lock-in.
-2. JARVIS **model router** stays the single door. Agents never hardcode `localhost:11434`. They ask for a tier; the router picks OpenRouter vs local.
-3. If local is down or slow past SLA, **fail over to OpenRouter** for that task. No hung pipeline because Ollama restarted.
-4. Token/cost logs still record model id, source (`openrouter | ollama | vllm`), tokens, and USD (`$0` for local; still log token counts).
+2. JARVIS **model router** stays the single door. Agents never hardcode `localhost:11434`. They ask for an agent/tier; the router picks hosted provider vs local.
+3. If local is down or slow past SLA, **fail over to the hosted chain** (official API → OpenRouter) for that task. No hung pipeline because Ollama restarted.
+4. Token/cost logs still record model id, source (`deepseek_official | openrouter | ollama | vllm | …`), tokens, and USD (`$0` for local; still log token counts).
 5. Local models are for **Tier 0** (index **C3**) unless quality evals prove a specific local model matches a higher tier for a named job. Do not silently demote Architect from Tier 3 to a 7B.
 6. GPU/RAM ops are documented in `docs/runbook/inference.md` (start, stop, disk, models pulled, VRAM).
 7. Prompt caching / budgets / daily pause still apply. Local is not an excuse for infinite loops.

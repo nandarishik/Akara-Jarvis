@@ -12,6 +12,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from jarvis.config import get_settings
 from jarvis.db import store
 from jarvis.graph import compile_app
+from jarvis.models.providers import any_provider_key
 from jarvis.scaffold import ensure_template
 
 load_dotenv()
@@ -44,8 +45,12 @@ def build(intent: str = typer.Argument(..., help="What to build")) -> None:
     """Phase 1 stub CLI: one backend worker, branch + PR."""
     _install_signals()
     settings = get_settings()
-    if not settings.openrouter_api_key:
-        typer.echo("OPENROUTER_API_KEY missing in .env", err=True)
+    if not any_provider_key(settings):
+        typer.echo(
+            "No LLM API keys in .env. Set OPENROUTER_API_KEY and/or "
+            "DEEPSEEK_API_KEY, MINIMAX_API_KEY, ZAI_API_KEY, MOONSHOT_API_KEY, etc.",
+            err=True,
+        )
         raise typer.Exit(1)
     if not settings.database_url:
         typer.echo(

@@ -1,0 +1,848 @@
+version: 1
+research_date: "2026-08-17"
+portfolio: "B"  # B = Balanced (recommended default). Change to "A" or "C" for other portfolios.
+note: >
+  This routing configuration implements Portfolio B (Best Quality-to-Cost Ratio).
+  All model IDs reference entries in config/model-registry.proposed.yaml.
+  Escalation rules are measurable and must be evaluated by JARVIS before dispatching.
+  All routing decisions must be logged with correlation IDs.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GLOBAL RULES
+# ─────────────────────────────────────────────────────────────────────────────
+
+global_rules:
+  no_self_hosting: true
+  hosted_api_only: true
+  pin_exact_model_versions: true
+  # Always use dated model IDs where available to prevent silent checkpoint upgrades.
+  # Example: "deepseek-v4-pro-0813" not "deepseek-v4-pro"
+
+  require_cross_family_review_for_high_risk: true
+  # Reviewer model family MUST differ from implementing agent's model family.
+  # High-risk = auth, authorization, payments, RLS, secrets, production migrations,
+  # user data export/deletion, CI/CD credentials.
+
+  max_repair_attempts_before_escalation: 2
+  # After 2 consecutive failures on the same task:
+  # - If current model == primary: escalate to escalation_model
+  # - If current model == escalation_model: route to dead letter queue + alert human
+
+  invalid_json_retries_before_fallback: 1
+  # After 1 invalid JSON response: switch to fallback model for the remainder of the task.
+  # Do not persist with a model that cannot produce valid schema output.
+
+  require_provider_fallback_for_critical_models: true
+  # Any model rated concentration_risk: true in the registry must have a functioning
+  # alternative provider configured before being used in a critical agent role.
+
+  max_context_before_truncation: 0.85
+  # If incoming context exceeds 85% of the model's recommended context window,
+  # truncate oldest RAG chunks (not task spec, not system prompt) before sending.
+
+  tool_call_timeout_seconds: 30
+  # Abandon a tool call and retry after 30s without response.
+
+  agent_session_max_turns: 50
+  # Hard cap on tool-call turns per agent session.
+  # Session killed and routed to dead letter queue if exceeded.
+
+  temperature_for_security_sensitive: 0.0
+  # All tasks touching auth/authorization/RLS/secrets/migrations must use temperature 0.0.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RISK CLASSIFIER
+# ─────────────────────────────────────────────────────────────────────────────
+# JARVIS evaluates each incoming task against these rules before dispatching.
+# Tasks matching any HIGH_RISK rule trigger cross-family review and escalation routing.
+
+risk_classifier:
+  high_risk_patterns:
+    file_path_patterns:
+      - "**/auth/**"
+      - "**/authentication/**"
+      - "**/authorization/**"
+      - "**/middleware/auth*"
+      - "**/jwt*"
+      - "**/oauth*"
+      - "**/sessions/**"
+      - "**/payments/**"
+      - "**/billing/**"
+      - "**/stripe*"
+      - "**/crypto*"
+      - "**/encryption*"
+      - "**/secrets*"
+      - "**/.env*"
+      - "**/migrations/**"
+      - "**/rls*"
+      - "**/row_level_security*"
+      - "**/ci/**"
+      - "**/.github/workflows/**"
+      - "**/user_data_export*"
+      - "**/user_data_delete*"
+      - "**/admin/**"
+    content_patterns:
+      - "CREATE POLICY"
+      - "ENABLE ROW LEVEL SECURITY"
+      - "auth.uid()"
+      - "JWT"
+      - "oauth"
+      - "stripe"
+      - "process.env.*SECRET"
+      - "process.env.*KEY"
+      - "os.environ.*SECRET"
+      - "os.environ.*KEY"
+    task_description_keywords:
+      - "authentication"
+      - "authorization"
+      - "access control"
+      - "permission"
+      - "privilege"
+      - "secret"
+      - "token signing"
+      - "delete user data"
+      - "export user data"
+      - "production migration"
+      - "rls policy"
+    file_count_threshold: 10
+    # Tasks modifying > 10 files are treated as high-complexity (not necessarily high-risk,
+    # but triggers escalation consideration)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PORTFOLIO B AGENT CONFIGURATIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+agents:
+
+  # ────────────────────────────────────────────────────────────
+  # JARVIS Orchestrator
+  # Role: Task graph management, agent routing, budget enforcement, retry logic
+  # Sensitivity: JSON output must be schema-valid every single call
+  # ────────────────────────────────────────────────────────────
+  jarvis_orchestrator:
+    default_model: "deepseek_v4_flash"
+    default_provider: "deepseek_official"
+    default_model_id: "deepseek-v4-flash-0731"
+    fallback_model: "gpt_oss_120b"
+    fallback_provider: "groq"
+    fallback_model_id: "gpt-oss-120b"
+    escalation_model: null  # Orchestrator does not self-escalate
+    reviewer_model: null    # Orchestrator output is schema-validated deterministically
+
+    temperature: 0.0
+    max_context_tokens: 30000
+    max_output_tokens: 4000
+    task_budget_usd: 0.005
+
+    max_retries: 1
+    # After 1 invalid JSON: immediately switch to fallback (GPT-OSS-120B)
+    # After 1 more failure on fallback: halt task, alert human
+
+    structured_output:
+      required: true
+      validation: "json_schema_strict"
+      schema_file: "config/schemas/orchestrator_task_assignment.json"
+      on_invalid: "switch_to_fallback_immediately"
+
+    escalation_rules:
+      - trigger: "invalid_json_after_1_retry"
+        action: "switch_to_fallback_model"
+      - trigger: "tool_call_timeout_3_consecutive"
+        action: "halt_and_alert_human"
+      - trigger: "session_exceeds_max_turns"
+        action: "halt_and_route_to_dead_letter_queue"
+
+    openhands_settings:
+      model: "deepseek/deepseek-v4-flash-0731"  # LiteLLM model string
+      enable_openhands: false  # Orchestrator does not need OpenHands terminal
+
+    notes:
+      - "Temperature 0.0: routing decisions must be deterministic"
+      - "Schema validation runs before output is returned to LangGraph"
+      - "Fallback to GPT-OSS-120B on Groq for fast schema-valid recovery"
+
+  # ────────────────────────────────────────────────────────────
+  # Product Agent
+  # Role: PRD, user stories, acceptance criteria, NFRs
+  # Risk: Medium — vague requirements waste downstream tokens
+  # ────────────────────────────────────────────────────────────
+  product_agent:
+    default_model: "deepseek_v4_pro"
+    default_provider: "deepseek_official"
+    default_model_id: "deepseek-v4-pro-0813"
+    fallback_model: "kimi_k2_7_code"
+    fallback_provider: "moonshot_official"
+    fallback_model_id: "kimi-k2.6"
+    escalation_model: "glm_5_2"
+    escalation_provider: "zai_official"
+    escalation_model_id: "glm-5.2"
+    reviewer_model: null  # Product output reviewed by human before Architect starts
+
+    temperature: 0.3
+    max_context_tokens: 60000
+    max_output_tokens: 12000
+    task_budget_usd: 0.80
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "requirements_ambiguous_after_2_drafts"
+        action: "escalate_to_glm_5_2"
+        description: "If Product Agent produces conflicting acceptance criteria across 2 attempts, use GLM-5.2"
+      - trigger: "user_description_contradictory"
+        action: "escalate_and_request_human_clarification"
+      - trigger: "scope_significantly_larger_than_estimate"
+        action: "escalate_to_glm_5_2_and_notify_human"
+
+    openhands_settings:
+      enable_openhands: false  # Product Agent writes documents, no terminal
+
+  # ────────────────────────────────────────────────────────────
+  # Architect Agent
+  # Role: OpenAPI contracts, schema design, ADRs, sequence diagrams
+  # Risk: VERY HIGH — architectural errors cascade to all downstream agents
+  # ────────────────────────────────────────────────────────────
+  architect_agent:
+    default_model: "deepseek_v4_pro"
+    default_provider: "deepseek_official"
+    default_model_id: "deepseek-v4-pro-0813"
+    fallback_model: "glm_5_2"
+    fallback_provider: "zai_official"
+    fallback_model_id: "glm-5.2"
+    escalation_model: "kimi_k3"
+    escalation_provider: "moonshot_official"
+    escalation_model_id: "kimi-k3"
+    reviewer_model: "glm_5_2"
+    reviewer_provider: "zai_official"
+    reviewer_model_id: "glm-5.2"
+    cross_family_review: true
+    # DeepSeek V4 Pro → GLM-5.2 review: different model families, no correlated blind spots
+
+    temperature: 0.1
+    max_context_tokens: 120000
+    max_output_tokens: 20000
+    task_budget_usd: 5.00
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "openapi_yaml_invalid_after_2_retries"
+        action: "escalate_to_kimi_k3"
+        description: "If DeepSeek V4 Pro cannot produce valid OpenAPI YAML after 2 attempts, try Kimi K3"
+      - trigger: "task_involves_payment_processor_integration"
+        action: "escalate_to_kimi_k3_immediately"
+      - trigger: "task_involves_oauth_provider_design"
+        action: "escalate_to_kimi_k3_immediately"
+      - trigger: "task_involves_cryptographic_key_management"
+        action: "escalate_to_kimi_k3_immediately"
+      - trigger: "context_exceeds_200k_tokens"
+        action: "switch_to_glm_5_2"
+        description: "GLM-5.2 has documented reliable 400K window"
+
+    validation_gates:
+      - name: "openapi_yaml_valid"
+        command: "npx openapi-validator openapi.yaml"
+        on_failure: "retry_with_error_as_feedback"
+        max_validation_retries: 2
+        block_pipeline_on_failure: true
+        notes: "Pipeline MUST NOT proceed to coding agents if OpenAPI YAML is invalid"
+      - name: "sql_schema_syntax_valid"
+        command: "psql --dry-run < schema.sql"
+        on_failure: "retry_with_error_as_feedback"
+
+    openhands_settings:
+      enable_openhands: false  # Architect writes files directly; no terminal ops
+
+  # ────────────────────────────────────────────────────────────
+  # Design Agent
+  # Role: UX specs, design tokens, component hierarchy, library selection
+  # Vision: REQUIRED for screenshot comparison vs design intent
+  # ────────────────────────────────────────────────────────────
+  design_agent:
+    default_model: "minimax_m3"
+    default_provider: "minimax_official"
+    default_model_id: "minimax-m3"
+    fallback_model: "kimi_k2_5"
+    fallback_provider: "moonshot_official"
+    fallback_model_id: "kimi-k2.5"
+    escalation_model: null
+    reviewer_model: null
+
+    vision_required: true
+    # If default or fallback model does not support vision, halt and alert
+
+    temperature: 0.4
+    max_context_tokens: 40000
+    max_output_tokens: 8000
+    task_budget_usd: 0.25
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "design_tokens_json_invalid"
+        action: "retry_with_json_schema_feedback"
+      - trigger: "screenshot_comparison_fails_3_times"
+        action: "alert_human_for_design_review"
+
+    openhands_settings:
+      enable_openhands: false  # Design Agent receives screenshots; does not drive browser
+
+  # ────────────────────────────────────────────────────────────
+  # Frontend Agent
+  # Role: React/TypeScript components, pages, tests
+  # Runs in OpenHands (terminal + file editing)
+  # Risk: Medium — errors caught by Code Review + Playwright
+  # ────────────────────────────────────────────────────────────
+  frontend_agent:
+    default_model: "minimax_m3"
+    default_provider: "minimax_official"
+    default_model_id: "minimax-m3"
+    fallback_model: "kimi_k2_7_code"
+    fallback_provider: "moonshot_official"
+    fallback_model_id: "kimi-k2.7-code"
+    escalation_model: "deepseek_v4_pro"
+    escalation_provider: "deepseek_official"
+    escalation_model_id: "deepseek-v4-pro-0813"
+    reviewer_model: "glm_5_2"
+    reviewer_provider: "zai_official"
+    reviewer_model_id: "glm-5.2"
+    cross_family_review: true
+    # MiniMax M3 implementation → GLM-5.2 review: different families
+
+    temperature: 0.1
+    max_context_tokens: 80000
+    max_output_tokens: 16000
+    task_budget_usd: 0.50
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "typescript_compilation_fails_after_2_retries"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "vitest_test_failures_after_2_retries"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "complex_state_management_zustand_auth_flows"
+        action: "escalate_to_deepseek_v4_pro_immediately"
+      - trigger: "cross_browser_performance_bug"
+        action: "escalate_to_deepseek_v4_pro_immediately"
+      - trigger: "task_modifies_more_than_10_files"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "context_exceeds_60k_tokens"
+        action: "truncate_rag_context_oldest_first"
+      - trigger: "2_consecutive_task_failures_on_same_issue"
+        action: "escalate_to_deepseek_v4_pro_and_notify_human"
+
+    validation_gates:
+      - name: "typescript_compilation"
+        command: "npx tsc --noEmit"
+        on_failure: "retry_with_error_as_feedback"
+      - name: "no_any_types"
+        command: "npx tsc --strict --noImplicitAny --noEmit"
+        on_failure: "request_changes"
+      - name: "vitest_tests_pass"
+        command: "npx vitest run"
+        on_failure: "retry_with_test_output_as_feedback"
+
+    openhands_settings:
+      enable_openhands: true
+      model: "openrouter/minimax/minimax-m3"
+      # Fallback model string for OpenHands:
+      fallback_model_openhands: "openrouter/moonshotai/kimi-k2.7-code"
+
+  # ────────────────────────────────────────────────────────────
+  # Backend Agent
+  # Role: FastAPI/Express endpoints, auth middleware, service layer
+  # Risk: HIGH — handles authentication, authorization, secrets
+  # ────────────────────────────────────────────────────────────
+  backend_agent:
+    default_model: "minimax_m3"
+    default_provider: "minimax_official"
+    default_model_id: "minimax-m3"
+    fallback_model: "kimi_k2_7_code"
+    fallback_provider: "moonshot_official"
+    fallback_model_id: "kimi-k2.7-code"
+    escalation_model: "deepseek_v4_pro"
+    escalation_provider: "deepseek_official"
+    escalation_model_id: "deepseek-v4-pro-0813"
+    reviewer_model: "glm_5_2"
+    reviewer_provider: "zai_official"
+    reviewer_model_id: "glm-5.2"
+    high_risk_reviewer_model: "kimi_k3"
+    high_risk_reviewer_provider: "moonshot_official"
+    high_risk_reviewer_model_id: "kimi-k3"
+    cross_family_review: true
+
+    temperature: 0.0  # Security-critical: deterministic
+    temperature_non_security: 0.1
+    max_context_tokens: 80000
+    max_output_tokens: 16000
+    task_budget_usd: 0.50
+    task_budget_usd_auth_security: 3.00
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "task_touches_authentication_code"
+        action: "escalate_to_deepseek_v4_pro_immediately"
+        description: "Any auth endpoint, JWT middleware, OAuth flow, session management"
+        temperature_override: 0.0
+        require_kimi_k3_review: true
+      - trigger: "task_touches_authorization_code"
+        action: "escalate_to_deepseek_v4_pro_immediately"
+        description: "RBAC, ABAC, permission checks, ownership verification"
+        temperature_override: 0.0
+        require_kimi_k3_review: true
+      - trigger: "task_touches_payment_processing"
+        action: "escalate_to_deepseek_v4_pro_immediately"
+        require_kimi_k3_review: true
+      - trigger: "task_touches_secrets_management"
+        action: "escalate_to_deepseek_v4_pro_immediately"
+      - trigger: "pytest_failures_after_2_retries"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "task_modifies_more_than_10_files"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "2_consecutive_task_failures"
+        action: "escalate_to_deepseek_v4_pro_and_notify_human"
+
+    validation_gates:
+      - name: "pytest_tests_pass"
+        command: "pytest --tb=short"
+        on_failure: "retry_with_test_output_as_feedback"
+      - name: "ruff_lint"
+        command: "ruff check ."
+        on_failure: "auto_fix_then_retry"
+      - name: "schemathesis_contract_test"
+        command: "schemathesis run openapi.yaml --url http://localhost:8000"
+        on_failure: "retry_with_conformance_errors_as_feedback"
+      - name: "semgrep_security_scan"
+        command: "semgrep --config=auto --severity=ERROR"
+        on_failure: "escalate_to_security_agent_and_block"
+        block_pipeline_on_critical: true
+      - name: "no_hardcoded_secrets"
+        command: "trufflehog filesystem . --only-verified"
+        on_failure: "block_pr_and_alert_immediately"
+
+    openhands_settings:
+      enable_openhands: true
+      model: "openrouter/minimax/minimax-m3"
+      fallback_model_openhands: "openrouter/moonshotai/kimi-k2.7-code"
+
+  # ────────────────────────────────────────────────────────────
+  # AI/ML Agent
+  # Role: RAG pipelines, prompt templates, model integration layers
+  # ────────────────────────────────────────────────────────────
+  ai_ml_agent:
+    default_model: "kimi_k2_7_code"
+    default_provider: "moonshot_official"
+    default_model_id: "kimi-k2.6"
+    fallback_model: "minimax_m3"
+    fallback_provider: "minimax_official"
+    fallback_model_id: "minimax-m3"
+    escalation_model: "deepseek_v4_pro"
+    escalation_provider: "deepseek_official"
+    escalation_model_id: "deepseek-v4-pro-0813"
+    reviewer_model: "glm_5_2"
+    reviewer_provider: "zai_official"
+    cross_family_review: true
+
+    temperature: 0.2
+    max_context_tokens: 60000
+    max_output_tokens: 12000
+    task_budget_usd: 1.00
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "embedding_pipeline_integration_fails_after_2_retries"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "vector_search_query_malformed"
+        action: "retry_with_sql_error_as_feedback"
+
+    openhands_settings:
+      enable_openhands: true
+      model: "openrouter/moonshotai/kimi-k2.6"
+      fallback_model_openhands: "openrouter/minimax/minimax-m3"
+
+  # ────────────────────────────────────────────────────────────
+  # Database Agent
+  # Role: Schema, migrations, RLS policies, seed data
+  # Risk: VERY HIGH — production migrations are irreversible
+  # ────────────────────────────────────────────────────────────
+  database_agent:
+    default_model: "minimax_m3"
+    default_provider: "minimax_official"
+    default_model_id: "minimax-m3"
+    fallback_model: "kimi_k2_7_code"
+    fallback_provider: "moonshot_official"
+    fallback_model_id: "kimi-k2.7-code"
+    escalation_model: "deepseek_v4_pro"
+    escalation_provider: "deepseek_official"
+    escalation_model_id: "deepseek-v4-pro-0813"
+    reviewer_model: "glm_5_2"
+    reviewer_provider: "zai_official"
+    cross_family_review: true
+    # ALL migration PRs must be reviewed by GLM-5.2, regardless of complexity
+
+    temperature: 0.0
+    max_context_tokens: 60000
+    max_output_tokens: 12000
+    task_budget_usd: 0.30
+    task_budget_usd_production_migration: 2.00
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "task_is_production_schema_migration"
+        action: "escalate_to_deepseek_v4_pro_immediately"
+        additionally: "require_human_approval_before_execution"
+      - trigger: "task_involves_rls_policy_design"
+        action: "escalate_to_deepseek_v4_pro_immediately"
+        additionally: "require_glm_5_2_review_plus_human_approval"
+      - trigger: "migration_touches_more_than_3_tables"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "dry_run_fails_after_1_retry"
+        action: "escalate_to_deepseek_v4_pro"
+
+    validation_gates:
+      - name: "migration_dry_run"
+        command: "supabase db push --dry-run"
+        on_failure: "retry_with_error_as_feedback"
+        block_pipeline_on_failure: true
+      - name: "rollback_migration_exists"
+        command: "test -f supabase/migrations/*_rollback.sql"
+        on_failure: "block_and_request_rollback_migration"
+        block_pipeline_on_failure: true
+      - name: "rls_enabled_all_tables"
+        command: "./scripts/check_rls_enabled.sh"
+        on_failure: "block_and_request_rls_enable"
+      - name: "no_destructive_operations"
+        command: "grep -i 'DROP TABLE\\|TRUNCATE\\|DELETE FROM' migration.sql"
+        on_failure: "block_immediately_and_alert_human"
+        notes: "DROP, TRUNCATE, DELETE in migrations are always blocked — require explicit human override"
+
+    openhands_settings:
+      enable_openhands: true
+      model: "openrouter/minimax/minimax-m3"
+      fallback_model_openhands: "openrouter/moonshotai/kimi-k2.7-code"
+
+  # ────────────────────────────────────────────────────────────
+  # Code Review Agent
+  # Role: Gate every PR; cross-family review mandatory
+  # Risk: HIGH — must catch security anti-patterns; errors reach production
+  # ────────────────────────────────────────────────────────────
+  code_review_agent:
+    default_model: "glm_5_2"
+    default_provider: "zai_official"
+    default_model_id: "glm-5.2"
+    fallback_model: "deepseek_v4_pro"
+    fallback_provider: "deepseek_official"
+    fallback_model_id: "deepseek-v4-pro-0813"
+    high_risk_model: "kimi_k3"
+    high_risk_provider: "moonshot_official"
+    high_risk_model_id: "kimi-k3"
+    reviewer_model: null  # Code Review Agent IS the reviewer
+
+    cross_family_review_enforcement:
+      enabled: true
+      rule: >
+        The model used for Code Review MUST be from a different family than
+        the model that authored the implementation being reviewed.
+        Implementation by MiniMax M3 → Review by GLM-5.2 (different family). ✓
+        Implementation by MiniMax M3 → Review by MiniMax M3 (same family). ✗ — BLOCKED
+        Implementation by GLM-5.1 → Review by DeepSeek V4 Pro (different family). ✓
+      on_family_match_violation: "block_review_and_assign_different_model"
+
+    temperature: 0.0
+    max_context_tokens: 100000
+    max_output_tokens: 8000
+    task_budget_usd: 0.80
+    task_budget_usd_high_risk: 5.00
+
+    max_retries: 1
+
+    structured_output:
+      required: true
+      schema: |
+        {
+          "verdict": "APPROVE | REQUEST_CHANGES | BLOCK",
+          "blocking_issues": [{ "line": int, "file": str, "description": str, "severity": "CRITICAL|HIGH|MEDIUM" }],
+          "requested_changes": [{ "line": int, "file": str, "description": str }],
+          "security_findings": [{ "line": int, "file": str, "type": str, "cwe_id": str, "description": str, "remediation": str }],
+          "spec_compliance": { "compliant": bool, "violations": [str] }
+        }
+      validation: "json_schema_strict"
+      on_invalid: "switch_to_fallback_immediately"
+
+    escalation_rules:
+      - trigger: "pr_touches_authentication"
+        action: "use_kimi_k3_as_reviewer"
+        temperature_override: 0.0
+      - trigger: "pr_touches_authorization"
+        action: "use_kimi_k3_as_reviewer"
+      - trigger: "pr_touches_payments"
+        action: "use_kimi_k3_as_reviewer"
+      - trigger: "pr_touches_rls_policies"
+        action: "use_kimi_k3_as_reviewer_and_require_human_approval"
+      - trigger: "pr_touches_secrets_management"
+        action: "use_kimi_k3_as_reviewer"
+      - trigger: "pr_touches_production_migration"
+        action: "use_kimi_k3_as_reviewer_and_require_human_approval"
+      - trigger: "pr_touches_user_data_export_or_deletion"
+        action: "use_kimi_k3_as_reviewer_and_require_human_approval"
+      - trigger: "pr_touches_ci_cd_credentials"
+        action: "use_kimi_k3_as_reviewer"
+      - trigger: "glm_5_2_unavailable"
+        action: "switch_to_deepseek_v4_pro_fallback"
+        note: "Same family as DeepSeek implementation agents — acceptable only as emergency fallback"
+
+    review_instructions: |
+      You are reviewing a PR in the context of the JARVIS system specification.
+      1. Compare the PR diff against the task specification (provided in context).
+      2. Check for: missing tests, hardcoded secrets, SQL injection vectors,
+         missing authorization checks, overly permissive CORS, stack trace exposure,
+         missing input validation, N+1 query patterns.
+      3. Do NOT approve code that touches auth/authorization without explicit
+         ownership/membership check for every data access.
+      4. Do NOT approve code with any hardcoded credential or secret.
+      5. Produce a structured JSON verdict using the required schema.
+
+  # ────────────────────────────────────────────────────────────
+  # QA Agent
+  # Role: Playwright E2E tests, API contract tests, browser state verification
+  # Vision: REQUIRED
+  # ────────────────────────────────────────────────────────────
+  qa_agent:
+    default_model: "minimax_m3"
+    default_provider: "minimax_official"
+    default_model_id: "minimax-m3"
+    fallback_model: "devstral_small_2505"
+    fallback_provider: "mistral_official"
+    fallback_model_id: "devstral-small-2505"
+    escalation_model: "deepseek_v4_pro"
+    escalation_provider: "deepseek_official"
+    reviewer_model: null
+
+    vision_required: true
+
+    temperature: 0.1
+    max_context_tokens: 50000
+    max_output_tokens: 12000
+    task_budget_usd: 0.40
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "playwright_tests_fail_due_to_race_conditions_after_2_retries"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "screenshot_comparison_fails_consistently"
+        action: "alert_design_agent_for_spec_update"
+
+    validation_gates:
+      - name: "no_sleep_in_tests"
+        command: "grep -r 'await sleep\\|setTimeout' tests/e2e/"
+        on_match: "block_and_request_changes"
+        notes: "Sleep in tests indicates flaky test; reject immediately"
+      - name: "playwright_tests_pass"
+        command: "npx playwright test"
+        on_failure: "retry_with_error_output_as_feedback"
+      - name: "test_data_cleanup"
+        description: "Verify all tests clean up created data"
+        type: "manual_review"
+
+    openhands_settings:
+      enable_openhands: true
+      model: "openrouter/minimax/minimax-m3"
+      fallback_model_openhands: "openrouter/mistralai/devstral-small-2505"
+
+  # ────────────────────────────────────────────────────────────
+  # Security Agent
+  # Role: Parse Semgrep/Trivy/ZAP output; normalize findings; produce structured report
+  # Note: This agent INTERPRETS scanner output — it does NOT perform security analysis
+  # ────────────────────────────────────────────────────────────
+  security_agent:
+    default_model: "deepseek_v4_flash"
+    default_provider: "deepseek_official"
+    default_model_id: "deepseek-v4-flash-0731"
+    fallback_model: "gpt_oss_120b"
+    fallback_provider: "groq"
+    fallback_model_id: "gpt-oss-120b"
+    escalation_model: null
+    reviewer_model: null  # Output validated by schema checker
+
+    temperature: 0.0  # Parsing: deterministic
+    max_context_tokens: 40000
+    max_output_tokens: 8000
+    task_budget_usd: 0.05
+
+    max_retries: 1
+    structured_output:
+      required: true
+      schema: |
+        {
+          "findings": [{
+            "id": "str",
+            "tool": "semgrep|trivy|zap",
+            "severity": "CRITICAL|HIGH|MEDIUM|LOW|INFO",
+            "rule": "str",
+            "file": "str",
+            "line": "int|null",
+            "description": "str",
+            "remediation": "str"
+          }],
+          "summary": {
+            "critical": int,
+            "high": int,
+            "medium": int,
+            "low": int,
+            "info": int,
+            "total": int
+          },
+          "blocked": "bool",
+          "deduplication_note": "str"
+        }
+      on_invalid: "switch_to_fallback_immediately"
+
+    constraints:
+      - "MUST NOT add findings not present in scanner output"
+      - "MUST NOT suppress CRITICAL or HIGH findings"
+      - "MUST deduplicate: same rule + same file + same line = one finding"
+      - "blocked must be true if any CRITICAL or HIGH finding is present"
+      - "blocked must be false if only INFO or WARNING findings are present"
+
+    openhands_settings:
+      enable_openhands: false
+
+  # ────────────────────────────────────────────────────────────
+  # DevOps Agent
+  # Role: Dockerfiles, GitHub Actions YAML, deployment configs
+  # ────────────────────────────────────────────────────────────
+  devops_agent:
+    default_model: "minimax_m3"
+    default_provider: "minimax_official"
+    default_model_id: "minimax-m3"
+    fallback_model: "devstral_small_2505"
+    fallback_provider: "mistral_official"
+    fallback_model_id: "devstral-small-2505"
+    escalation_model: "deepseek_v4_pro"
+    escalation_provider: "deepseek_official"
+    escalation_model_id: "deepseek-v4-pro-0813"
+    reviewer_model: "glm_5_2"
+    reviewer_provider: "zai_official"
+    cross_family_review: true
+
+    temperature: 0.1
+    max_context_tokens: 40000
+    max_output_tokens: 8000
+    task_budget_usd: 0.30
+
+    max_retries: 2
+    escalation_rules:
+      - trigger: "new_cicd_pipeline_architecture_required"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "github_actions_failing_across_interdependent_jobs"
+        action: "escalate_to_deepseek_v4_pro"
+      - trigger: "task_touches_secrets_in_ci"
+        action: "require_glm_5_2_review"
+
+    validation_gates:
+      - name: "dockerfile_non_root_user"
+        command: "docker build . && docker run --rm $(docker build -q .) whoami | grep -v root"
+        on_failure: "block_and_request_non_root_user"
+      - name: "dockerfile_no_devdeps"
+        description: "Multi-stage build must not include devDependencies in runtime stage"
+        type: "automated_check"
+      - name: "github_actions_yaml_lint"
+        command: "yamllint .github/workflows/"
+        on_failure: "retry_with_yaml_errors_as_feedback"
+      - name: "no_hardcoded_credentials_in_ci"
+        command: "grep -r 'password:\\|secret:\\|token:' .github/workflows/"
+        on_match: "block_immediately"
+
+    openhands_settings:
+      enable_openhands: true
+      model: "openrouter/minimax/minimax-m3"
+      fallback_model_openhands: "openrouter/mistralai/devstral-small-2505"
+
+  # ────────────────────────────────────────────────────────────
+  # Documentation Agent
+  # Role: README, changelog, API docs, runbooks — template-driven
+  # Risk: LOW — easy to update if wrong
+  # ────────────────────────────────────────────────────────────
+  documentation_agent:
+    default_model: "deepseek_v4_flash"
+    default_provider: "deepseek_official"
+    default_model_id: "deepseek-v4-flash-0731"
+    fallback_model: "devstral_small_2505"
+    fallback_provider: "mistral_official"
+    fallback_model_id: "devstral-small-2505"
+    escalation_model: null
+    reviewer_model: null
+
+    temperature: 0.3
+    max_context_tokens: 35000
+    max_output_tokens: 8000
+    task_budget_usd: 0.03
+
+    max_retries: 1
+    escalation_rules:
+      - trigger: "markdown_lint_fails_after_2_retries"
+        action: "use_fallback_model"
+
+    openhands_settings:
+      enable_openhands: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PORTFOLIO ALTERNATIVES
+# Uncomment and replace agent sections to switch portfolios
+# ─────────────────────────────────────────────────────────────────────────────
+
+portfolio_a_overrides:
+  note: "Override default_model entries with these for Portfolio A (Maximum Quality)"
+  jarvis_orchestrator:
+    default_model: "deepseek_v4_pro"
+    default_model_id: "deepseek-v4-pro-0813"
+  frontend_agent:
+    default_model: "glm_5_1"
+    default_model_id: "glm-5.1"
+    openhands_model: "openrouter/z-ai/glm-5.1"
+  backend_agent:
+    default_model: "glm_5_1"
+    default_model_id: "glm-5.1"
+    openhands_model: "openrouter/z-ai/glm-5.1"
+  database_agent:
+    default_model: "glm_5_1"
+    default_model_id: "glm-5.1"
+  ai_ml_agent:
+    default_model: "kimi_k2_7_code"
+  code_review_agent:
+    default_model: "glm_5_2"
+    high_risk_model: "kimi_k3"
+  architect_agent:
+    default_model: "glm_5_2"
+    default_model_id: "glm-5.2"
+  devops_agent:
+    default_model: "glm_5_1"
+    default_model_id: "glm-5.1"
+
+portfolio_c_overrides:
+  note: "Override default_model entries with these for Portfolio C (Lowest Cost)"
+  product_agent:
+    default_model: "deepseek_v4_flash"
+    default_model_id: "deepseek-v4-flash-0731"
+  frontend_agent:
+    default_model: "deepseek_v4_flash"
+    default_model_id: "deepseek-v4-flash-0731"
+    openhands_model: "deepseek/deepseek-v4-flash-0731"
+  backend_agent:
+    default_model: "deepseek_v4_flash"
+    default_model_id: "deepseek-v4-flash-0731"
+    openhands_model: "deepseek/deepseek-v4-flash-0731"
+  ai_ml_agent:
+    default_model: "deepseek_v4_flash"
+  database_agent:
+    default_model: "deepseek_v4_flash"
+  code_review_agent:
+    default_model: "deepseek_v4_pro"
+    high_risk_model: "deepseek_v4_pro"
+    note: "Cross-family review is partial in Portfolio C — both Architect and Code Review use DeepSeek family"
+  design_agent:
+    default_model: "qwen3_6_27b"
+    default_model_id: "Qwen/Qwen3.6-27B-Instruct"
+    default_provider: "deepinfra"
+  qa_agent:
+    default_model: "devstral_small_2505"
+    default_model_id: "devstral-small-2505"
+  devops_agent:
+    default_model: "deepseek_v4_flash"

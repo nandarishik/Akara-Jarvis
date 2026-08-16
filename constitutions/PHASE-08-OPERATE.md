@@ -61,21 +61,23 @@ Phase 8's job is to run this **enough times** that the seams are dull.
 
 ## 4. Spend & routing truth
 
-Default tiers from `SWE TEAM.MD` must match production routing code, not a markdown table.
+Production routing **must** match `config/model-routing.yaml` (Portfolio B default), not a stale markdown table in `SWE TEAM.MD`.
 
-| Agent | Default |
+| Agent | Primary (B) |
 |---|---|
-| JARVIS | 2 |
-| Product | 2 |
-| Architect | 3 |
-| Design | 1 |
-| Frontend / Backend / DB / QA / Security / DevOps / Docs | 0 |
-| Code Review | 2 |
-| AI/ML | 2 |
+| JARVIS / Security / Docs | DeepSeek V4 Flash |
+| Product / Architect | DeepSeek V4 Pro |
+| Design / FE / BE / DB / QA / DevOps | MiniMax M3 |
+| AI/ML | Kimi K2.6 |
+| Code Review | GLM-5.2 (cross-family; high-risk → Kimi K3) |
+
+**Spend realism (Model Research):** active development on Portfolio B is about **$50–150/mo** (5–15 features/week). A **$20/mo** LLM budget is only plausible on Portfolio C at slow pace. Caps in `.env` must reflect the chosen portfolio.
 
 Prompt cache on. Artifact/context cache on. Dedup retrieval on.
 
-Self-hosted Ollama/vLLM only via [PHASE-09](PHASE-09-SELF-HOSTED-INFERENCE.md) when **its trigger** is true — not "this week felt slow."
+**Bake-off Go/No-Go:** before claiming Phase 8 “fully functional,” run (or schedule) the harness in `Model Research/model-evaluation-plan.md` for Architect, Backend auth, and Code Review planted defects. MiniMax Community License must be on the legal checklist (`docs/runbook/models.md`).
+
+Self-hosted Ollama/vLLM only via [PHASE-09](PHASE-09-SELF-HOSTED-INFERENCE.md) when **its trigger** is true — not "this week felt slow." Hosted Portfolio B usually removes the **cost** trigger for Phase 9.
 
 ---
 
@@ -167,6 +169,7 @@ These have their own V2 constitutions. Writing them "so we're ahead" **violates*
 - [ ] Lifecycle diagram in `SWE TEAM.MD` matches the running system (if not, **change the system or amend the doc** — do not live with drift)
 - [ ] Known limitations listed (what "build anything" still cannot do: native mobile, giant monorepo migrations, etc.)
 - [ ] At least one C8 successful prod release is in the deployment table (the 20-count starts here)
+- [ ] Bake-off Go/No-Go recorded (or explicitly deferred with date) for Architect / Backend auth / Code Review
 - [ ] No V2 infra merged "just in case"
 
 ---

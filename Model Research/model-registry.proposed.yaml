@@ -1,0 +1,945 @@
+version: 1
+research_date: "2026-08-17"
+note: >
+  This is a PROPOSED registry. All pricing, availability, and API details
+  were verified on 2026-08-17. Re-verify before production deployment.
+  Models marked concentration_risk: true require a secondary provider to be
+  configured before use in any critical agent role.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PRIMARY RECOMMENDED MODELS
+# ─────────────────────────────────────────────────────────────────────────────
+
+models:
+
+  # ──────────────────────────────────────────────────────────
+  # DeepSeek V4 Pro
+  # ──────────────────────────────────────────────────────────
+  deepseek_v4_pro:
+    canonical_name: "DeepSeek V4 Pro"
+    developer: "DeepSeek"
+    release_date: "2026-08-13"
+    pinned_version_id: "deepseek-v4-pro-0813"
+    classification: open_weight
+    license: "MIT"
+    model_family: "DeepSeek V4"
+    architecture: "Sparse MoE"
+    total_parameters_B: 1600
+    active_parameters_B: 49
+    context_window_claimed: 1000000
+    context_window_recommended: 400000
+    max_output_tokens: 384000
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    supports_reasoning: true
+    reasoning_control: "enable_thinking parameter; off by default"
+    coding_specialization: true
+    known_strengths:
+      - "Highest SWE-bench Verified among open-weight models (80.6%)"
+      - "MIT license — unrestricted commercial use"
+      - "Auto prompt caching — no configuration needed"
+      - "Switchable reasoning mode (thinking on/off)"
+      - "Anthropic-format API compatibility"
+      - "1M token context with 384K max output"
+    known_weaknesses:
+      - "Pricing increased 51–355% on 2026-08-16; monitor closely"
+      - "Peak hours expensive (01:00–04:00, 06:00–10:00 UTC)"
+      - "Only 2 models on official DeepSeek API"
+      - "No vision support"
+    evidence_confidence: "High"
+    benchmark_scores:
+      swe_bench_verified: "80.6%"
+      live_code_bench: "93.5%"
+      deep_swe: "62.7%"
+      terminal_bench_2_1: "57.9%"
+      toolathlon_verified: "74.1%"
+    source_notes:
+      - "SRC-033 (DeepSeek API changelog)"
+      - "SRC-024 (Onyx coding leaderboard)"
+    concentration_risk: false
+    providers:
+      deepseek_official:
+        model_id: "deepseek-v4-pro"
+        pinned_model_id: "deepseek-v4-pro-0813"
+        api_base_url: "https://api.deepseek.com"
+        api_compatibility: "openai_and_anthropic"
+        input_price_per_million: 0.66       # off-peak
+        output_price_per_million: 1.98      # off-peak
+        input_price_peak_per_million: 1.32
+        output_price_peak_per_million: 3.96
+        cached_input_price_per_million: 0.022
+        reasoning_price_per_million: "Same as output"
+        context_window: 1000000
+        max_output_tokens: 384000
+        tool_support: true
+        json_schema_support: true
+        streaming_support: true
+        prompt_caching: true
+        prompt_caching_type: "automatic"
+        rate_limits:
+          requests_per_minute: 500
+          tokens_per_minute: "Not published"
+        privacy_notes: "Minimal logging; logs deleted after short window. No training use."
+        version_pinning: true
+        silent_upgrade_risk: "Use dated ID deepseek-v4-pro-0813 to prevent"
+        availability_status: "GA"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - Architect Agent (primary)
+          - Product Agent (primary)
+          - Backend Agent (escalation target)
+          - Database Agent (escalation target)
+      deepinfra:
+        model_id: "deepseek-ai/DeepSeek-V4-Pro-0813"
+        api_base_url: "https://api.deepinfra.com/v1/openai"
+        api_compatibility: "openai"
+        input_price_per_million: 1.30
+        output_price_per_million: 2.60
+        cached_input_price_per_million: null
+        context_window: 1000000
+        max_output_tokens: 384000
+        tool_support: true
+        json_schema_support: true
+        streaming_support: true
+        prompt_caching: false
+        availability_status: "Available"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - Fallback when DeepSeek API unavailable
+      fireworks_ai:
+        model_id: "accounts/fireworks/models/deepseek-v4-pro"
+        api_base_url: "https://api.fireworks.ai/inference/v1"
+        api_compatibility: "openai"
+        input_price_per_million: 1.74
+        output_price_per_million: 3.48
+        context_window: 1000000
+        tool_support: true
+        json_schema_support: true
+        prompt_caching: false
+        availability_status: "Available"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - Tertiary fallback (HIPAA/SOC2 compliance)
+
+  # ──────────────────────────────────────────────────────────
+  # DeepSeek V4 Flash
+  # ──────────────────────────────────────────────────────────
+  deepseek_v4_flash:
+    canonical_name: "DeepSeek V4 Flash"
+    developer: "DeepSeek"
+    release_date: "2026-07-31"
+    pinned_version_id: "deepseek-v4-flash-0731"
+    classification: open_weight
+    license: "MIT"
+    model_family: "DeepSeek V4"
+    architecture: "MoE"
+    context_window_claimed: 1000000
+    context_window_recommended: 200000
+    max_output_tokens: 384000
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    supports_reasoning: true
+    coding_specialization: true
+    known_strengths:
+      - "Cheapest serious MoE model ($0.22/$0.66 off-peak)"
+      - "Highest concurrency limit (2,500)"
+      - "Auto prompt caching"
+      - "1M token context"
+    known_weaknesses:
+      - "53.8% real-world agent task success rate (Composio; beta)"
+      - "Still in beta at research date"
+      - "Not suitable as primary model for complex multi-step agentic tasks"
+      - "Pricing increased 57–371% on 2026-08-16"
+    evidence_confidence: "Medium"
+    benchmark_scores:
+      deep_swe: "54.4%"
+      real_world_agent_composio_240_runs: "53.8% (129/240 passed)"
+    concentration_risk: false
+    providers:
+      deepseek_official:
+        model_id: "deepseek-v4-flash"
+        pinned_model_id: "deepseek-v4-flash-0731"
+        api_base_url: "https://api.deepseek.com"
+        api_compatibility: "openai_and_anthropic"
+        input_price_per_million: 0.22
+        output_price_per_million: 0.66
+        input_price_peak_per_million: 0.44
+        output_price_peak_per_million: 1.32
+        cached_input_price_per_million: 0.007
+        context_window: 1000000
+        max_output_tokens: 384000
+        tool_support: true
+        json_schema_support: true
+        streaming_support: true
+        prompt_caching: true
+        rate_limits:
+          requests_per_minute: 2500
+        availability_status: "Public Beta"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - JARVIS Orchestrator (primary)
+          - Security Agent (primary)
+          - Documentation Agent (primary)
+
+  # ──────────────────────────────────────────────────────────
+  # MiniMax M3
+  # ──────────────────────────────────────────────────────────
+  minimax_m3:
+    canonical_name: "MiniMax M3"
+    developer: "MiniMax"
+    release_date: "2026-06-01"
+    classification: open_weight
+    license: "MiniMax Community License"
+    license_notes: "REQUIRES legal review for commercial autonomous agent deployment before production use"
+    model_family: "MiniMax M3"
+    architecture: "Sparse MoE with MiniMax Sparse Attention (MSA)"
+    total_parameters_B: 428
+    active_parameters_B: 23
+    context_window_claimed: 1000000
+    context_window_recommended: 512000
+    max_output_tokens: 524288
+    max_output_tokens_recommended: 131072
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: true
+    vision_modalities:
+      - image
+      - video
+    supports_reasoning: true
+    reasoning_control: "thinking toggle (on/off)"
+    coding_specialization: true
+    known_strengths:
+      - "Best value for OpenHands agentic coding (OpenHands Index 57.2)"
+      - "Native vision — image and video input"
+      - "Both Anthropic and OpenAI API format"
+      - "Auto prompt caching"
+      - "1M token context"
+      - "Strong BrowseComp score (83.5%) for browser agent tasks"
+    known_weaknesses:
+      - "Community License requires legal review"
+      - "Single primary provider (MiniMax API)"
+      - "Smaller company with less operational track record"
+    evidence_confidence: "High"
+    benchmark_scores:
+      openhands_index: 57.2
+      swe_bench_pro: "59.0%"
+      browse_comp: "83.5%"
+    concentration_risk: true
+    concentration_risk_notes: "Only one dedicated provider (MiniMax API); OpenRouter as backup"
+    providers:
+      minimax_official:
+        model_id: "minimax-m3"
+        api_base_url: "https://api.minimax.io/v1"
+        api_compatibility: "openai_and_anthropic"
+        input_price_per_million: 0.30         # ≤512K context
+        output_price_per_million: 1.20        # ≤512K context
+        input_price_long_context_per_million: 0.60   # >512K
+        output_price_long_context_per_million: 2.40  # >512K
+        cached_input_price_per_million: 0.06
+        priority_tier_multiplier: 1.5
+        context_window: 1000000
+        max_output_tokens: 524288
+        tool_support: true
+        json_schema_support: true
+        streaming_support: true
+        prompt_caching: true
+        prompt_caching_type: "automatic"
+        vision_support: true
+        availability_status: "GA"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - Frontend Agent (primary)
+          - Backend Agent (primary)
+          - Database Agent (primary)
+          - AI/ML Agent (primary)
+          - DevOps Agent (primary)
+          - QA Agent (primary)
+          - Design Agent (primary)
+      openrouter:
+        model_id: "minimax/minimax-m3"
+        api_compatibility: "openai"
+        input_price_per_million: 0.30
+        output_price_per_million: 1.20
+        context_window: 1000000
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+        recommended_for:
+          - Fallback when MiniMax API unavailable
+
+  # ──────────────────────────────────────────────────────────
+  # GLM-5.2 (Zhipu AI)
+  # ──────────────────────────────────────────────────────────
+  glm_5_2:
+    canonical_name: "GLM-5.2"
+    developer: "Zhipu AI (Z.ai)"
+    release_date: "2026-06-13"
+    classification: open_weight
+    license: "MIT"
+    model_family: "GLM-5"
+    architecture: "Sparse MoE"
+    total_parameters_B: 744
+    active_parameters_B: 40
+    context_window_claimed: 1000000
+    context_window_recommended: 400000
+    max_output_tokens: 131072
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    supports_reasoning: true
+    reasoning_control: "High and Max thinking modes"
+    coding_specialization: true
+    known_strengths:
+      - "Best open SWE-bench Pro (62.1%) at research date"
+      - "MIT license — unrestricted"
+      - "Strong Terminal-Bench (81.0%)"
+      - "FrontierSWE 74.4% (near proprietary frontier)"
+      - "1M context with 400K documented reliable window"
+    known_weaknesses:
+      - "Z.ai is China-based; latency from US/EU unverified"
+      - "No vision support"
+      - "Superseded by GLM-5.3 (Aug 14, 2026) — benchmark pending"
+    evidence_confidence: "High (coding/agentic); Medium (latency/reliability outside Asia)"
+    benchmark_scores:
+      swe_bench_pro: "62.1%"
+      terminal_bench_2_1: "81.0"
+      frontier_swe: "74.4%"
+      mcp_atlas: "77.0%"
+      nl2repo: "48.9%"
+    concentration_risk: true
+    concentration_risk_notes: "Primary API is Z.ai (China-based); OpenRouter as backup but same provider"
+    providers:
+      zai_official:
+        model_id: "glm-5.2"
+        api_base_url: "https://api.z.ai"
+        api_compatibility: "openai"
+        input_price_per_million: 1.40
+        output_price_per_million: 4.40
+        cached_input_price_per_million: 0.26
+        context_window: 1000000
+        max_output_tokens: 131072
+        tool_support: true
+        json_schema_support: true
+        streaming_support: true
+        prompt_caching: true
+        availability_status: "GA"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - Code Review Agent (primary)
+          - Architect Agent (fallback)
+      openrouter:
+        model_id: "z-ai/glm-5.2"
+        api_compatibility: "openai"
+        context_window: 1000000
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+        recommended_for:
+          - Code Review Agent (secondary)
+
+  # ──────────────────────────────────────────────────────────
+  # GLM-5.1 (Zhipu AI)
+  # ──────────────────────────────────────────────────────────
+  glm_5_1:
+    canonical_name: "GLM-5.1"
+    developer: "Zhipu AI (Z.ai)"
+    classification: open_weight
+    license: "MIT"
+    model_family: "GLM-5"
+    architecture: "Sparse MoE"
+    total_parameters_B: 744
+    active_parameters_B: 40
+    context_window_claimed: 1000000
+    context_window_recommended: 400000
+    max_output_tokens: 131072
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    coding_specialization: true
+    known_strengths:
+      - "Highest measured OpenHands Index (58.2) at research date"
+      - "MIT license"
+      - "Available via OpenRouter (GLM-5.2 may not be on all OpenRouter routes)"
+    known_weaknesses:
+      - "Superseded by GLM-5.2 on all benchmarks"
+      - "China-based provider"
+    evidence_confidence: "High"
+    benchmark_scores:
+      openhands_index: 58.2
+      swe_bench_pro: "58.4%"
+      terminal_bench_2_1: "62.0"
+    providers:
+      zai_official:
+        model_id: "glm-5.1"
+        api_base_url: "https://api.z.ai"
+        api_compatibility: "openai"
+        input_price_per_million: 1.05
+        output_price_per_million: 3.50
+        context_window: 1000000
+        max_output_tokens: 131072
+        tool_support: true
+        json_schema_support: true
+        availability_status: "GA"
+        verified_date: "2026-08-17"
+      openrouter:
+        model_id: "z-ai/glm-5.1"
+        api_compatibility: "openai"
+        input_price_per_million: 1.05
+        output_price_per_million: 3.50
+        context_window: 1000000
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+        recommended_for:
+          - Portfolio A (all coding agents)
+          - Fallback when GLM-5.2 unavailable
+
+  # ──────────────────────────────────────────────────────────
+  # Kimi K3 (Moonshot AI)
+  # ──────────────────────────────────────────────────────────
+  kimi_k3:
+    canonical_name: "Kimi K3"
+    developer: "Moonshot AI"
+    release_date: "2026-07-16"
+    weights_released: "2026-07-27"
+    classification: open_weight
+    license: "Kimi K3 License (Modified MIT)"
+    license_notes: "Review commercial terms; weights available but license has conditions"
+    model_family: "Kimi K"
+    architecture: "Sparse MoE with Kimi Delta Attention"
+    total_parameters_T: 2.8
+    active_parameters_B: 50
+    context_window_claimed: 1048576
+    max_output_tokens: null  # included in context
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: true
+    supports_reasoning: true
+    reasoning_control: "Always-on max only — cannot disable"
+    coding_specialization: true
+    known_strengths:
+      - "Highest Terminal-Bench 2.1 (88.3%) among all models"
+      - "Extremely strong on long-horizon agentic tasks"
+      - "Open weights (July 27, 2026)"
+      - "1M token context"
+    known_weaknesses:
+      - "Most expensive open-weight model ($3/$15)"
+      - "Always-on max reasoning cannot be disabled — costs uncontrollable in agent loops"
+      - "Not batch-eligible"
+      - "Reasoning token spiral risk in multi-turn tool-call loops"
+    evidence_confidence: "Medium (vendor-reported Terminal-Bench; limited independent)"
+    benchmark_scores:
+      terminal_bench_2_1: "88.3%"
+      deep_swe: "69.0%"
+      swe_bench_verified_kilo: "46.8%"
+    concentration_risk: false
+    providers:
+      moonshot_official:
+        model_id: "kimi-k3"
+        api_base_url: "https://api.moonshot.ai/v1"
+        api_compatibility: "openai"
+        input_price_per_million: 3.00
+        output_price_per_million: 15.00
+        cached_input_price_per_million: 0.30
+        batch_eligible: false
+        context_window: 1048576
+        tool_support: true
+        json_schema_support: true
+        vision_support: true
+        reasoning: "always_on_max"
+        availability_status: "GA"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - Code Review Agent (high-risk escalation only)
+          - Architect Agent (cross-service auth/payments escalation)
+      openrouter:
+        model_id: "moonshotai/kimi-k3"
+        api_compatibility: "openai"
+        context_window: 1048576
+        tool_support: true
+        availability_status: "Available"
+
+  # ──────────────────────────────────────────────────────────
+  # Kimi K2.7 Code (Moonshot AI)
+  # ──────────────────────────────────────────────────────────
+  kimi_k2_7_code:
+    canonical_name: "Kimi K2.7 Code"
+    developer: "Moonshot AI"
+    classification: open_weight
+    license: "Kimi K License (Modified MIT)"
+    model_family: "Kimi K"
+    architecture: "MoE"
+    context_window_claimed: 262144
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    coding_specialization: true
+    known_strengths:
+      - "Coding-specialized variant of K2.6"
+      - "Batch-eligible (40% discount)"
+      - "Prompt caching with cached rate $0.19/M"
+      - "Strong OpenHands Index (K2.6 = 57.1; K2.7 Code expected higher)"
+    known_weaknesses:
+      - "262K context limit (vs 1M for top candidates)"
+      - "Modified MIT license conditions"
+    evidence_confidence: "High"
+    benchmark_scores:
+      openhands_index_k2_6: 57.1
+    providers:
+      moonshot_official:
+        model_id: "kimi-k2.7-code"
+        api_base_url: "https://api.moonshot.ai/v1"
+        api_compatibility: "openai"
+        input_price_per_million: 0.95
+        output_price_per_million: 4.00
+        cached_input_price_per_million: 0.19
+        batch_discount: "40% off"
+        context_window: 262144
+        tool_support: true
+        json_schema_support: true
+        vision_support: false
+        availability_status: "GA"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - Frontend Agent (fallback)
+          - Backend Agent (fallback)
+          - AI/ML Agent (primary)
+      openrouter:
+        model_id: "moonshotai/kimi-k2.7-code"
+        availability_status: "Available"
+      fireworks_ai:
+        model_id: "accounts/fireworks/models/kimi-k2.6"
+        input_price_per_million: 0.95
+        output_price_per_million: 4.00
+        availability_status: "Available"
+
+  # ──────────────────────────────────────────────────────────
+  # Kimi K2.5 (Moonshot AI — Vision)
+  # ──────────────────────────────────────────────────────────
+  kimi_k2_5:
+    canonical_name: "Kimi K2.5"
+    developer: "Moonshot AI"
+    classification: open_weight
+    license: "Kimi K License (Modified MIT)"
+    model_family: "Kimi K"
+    context_window_claimed: 262144
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: true
+    vision_modalities:
+      - image
+      - video
+    coding_specialization: true
+    benchmark_scores:
+      openhands_index: 49.2
+    providers:
+      moonshot_official:
+        model_id: "kimi-k2.5"
+        input_price_per_million: 0.60
+        output_price_per_million: 3.00
+        cached_input_price_per_million: 0.10
+        batch_eligible: true
+        context_window: 262144
+        vision_support: true
+        availability_status: "GA"
+        recommended_for:
+          - Design Agent (fallback)
+          - QA Agent (fallback, if vision needed)
+
+  # ──────────────────────────────────────────────────────────
+  # Devstral Small 2505 (Mistral + All Hands AI)
+  # ──────────────────────────────────────────────────────────
+  devstral_small_2505:
+    canonical_name: "Devstral Small 2505"
+    developer: "Mistral AI + All Hands AI"
+    release_date: "2025-05-21"
+    classification: open_source
+    license: "Apache 2.0"
+    model_family: "Devstral"
+    architecture: "Dense"
+    total_parameters_B: 24
+    base_model: "Mistral-Small-3.1"
+    context_window_claimed: 131072
+    context_window_recommended: 128000
+    max_output_tokens: 32768
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    coding_specialization: true
+    openhands_compatible: true
+    openhands_notes: "Purpose-built for OpenHands CodeActAgent; joint development guarantees scaffold compatibility"
+    known_strengths:
+      - "Apache 2.0 — unrestricted commercial use, no legal review needed"
+      - "Purpose-built for OpenHands"
+      - "$0.10/$0.30 — among cheapest serious agentic models"
+      - "Reproducible evaluation: official SWE-bench Verified 46.8%"
+    known_weaknesses:
+      - "131K context limit (lowest of primary candidates)"
+      - "No vision support"
+      - "Released May 2025 — likely surpassed by more recent models"
+    evidence_confidence: "High"
+    benchmark_scores:
+      swe_bench_verified: "46.8%"
+    providers:
+      mistral_official:
+        model_id: "devstral-small-2505"
+        api_base_url: "https://api.mistral.ai"
+        api_compatibility: "openai"
+        input_price_per_million: 0.10
+        output_price_per_million: 0.30
+        context_window: 131072
+        tool_support: true
+        json_schema_support: true
+        streaming_support: true
+        prompt_caching: false
+        availability_status: "GA"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - QA Agent (fallback)
+          - DevOps Agent (fallback)
+          - Documentation Agent (fallback)
+      openrouter:
+        model_id: "mistralai/devstral-small-2505"
+        input_price_per_million: 0.10
+        output_price_per_million: 0.30
+        availability_status: "Available"
+
+  # ──────────────────────────────────────────────────────────
+  # Poolside Laguna S 2.1
+  # ──────────────────────────────────────────────────────────
+  laguna_s_2_1:
+    canonical_name: "Laguna S 2.1"
+    developer: "Poolside"
+    release_date: "2026-07-21"
+    classification: open_weight
+    license: "OpenMDW-1.1"
+    license_notes: "Verify commercial terms before production use"
+    model_family: "Laguna"
+    architecture: "Sparse MoE"
+    total_parameters_B: 118
+    active_parameters_B: 8
+    context_window_claimed: 1048576
+    max_output_tokens: 131072
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    supports_reasoning: true
+    reasoning_control: "Off or Max only — no intermediate levels"
+    coding_specialization: true
+    known_strengths:
+      - "Extremely cheap ($0.10/$0.20)"
+      - "Strong SWE-bench Multilingual (78.5%)"
+      - "Open weights"
+      - "Tool-calling baked into chat template"
+      - "Full trajectory archive published"
+    known_weaknesses:
+      - "OpenMDW-1.1 — verify terms"
+      - "Only thinking off/max (no granular control)"
+      - "Limited provider base (OpenRouter + Baseten)"
+      - "Primarily vendor benchmarks; limited independent reproduction"
+    evidence_confidence: "Medium"
+    benchmark_scores:
+      terminal_bench_2_1: "70.2%"
+      swe_bench_multilingual: "78.5%"
+      swe_bench_pro_public: "59.4%"
+      deep_swe: "40.4%"
+    providers:
+      openrouter:
+        model_id: "poolside/laguna-s-2.1"
+        api_compatibility: "openai"
+        input_price_per_million: 0.10
+        output_price_per_million: 0.20
+        cached_input_price_per_million: 0.01
+        context_window: 1048576
+        max_output_tokens: 131072
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+        verified_date: "2026-08-17"
+        recommended_for:
+          - Budget alternative to Devstral Small
+          - Bake-off candidate for implementation roles
+      baseten:
+        model_id: "laguna-s-2.1"
+        availability_status: "Available"
+
+  # ──────────────────────────────────────────────────────────
+  # Qwen3 Coder 480B-A35B
+  # ──────────────────────────────────────────────────────────
+  qwen3_coder_480b:
+    canonical_name: "Qwen3 Coder 480B-A35B Instruct"
+    developer: "Alibaba Qwen Team"
+    classification: open_source
+    license: "Apache 2.0"
+    model_family: "Qwen3"
+    architecture: "Sparse MoE"
+    total_parameters_B: 480
+    active_parameters_B: 35
+    experts_total: 160
+    experts_active: 8
+    context_window_claimed: 1000000
+    context_window_practical_deepinfra: 256000
+    supports_tools: true
+    supports_json_schema: false  # at cheapest DeepInfra FP4 tier
+    supports_json_schema_notes: "JSON mode unavailable at DeepInfra FP4; available at Google Vertex"
+    supports_vision: false
+    coding_specialization: true
+    benchmark_scores:
+      swe_bench_pro_scale_ai: "38.7%"
+    evidence_confidence: "Medium"
+    providers:
+      deepinfra_turbo_fp4:
+        model_id: "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+        api_base_url: "https://api.deepinfra.com/v1/openai"
+        input_price_per_million: 0.23
+        output_price_per_million: 0.41
+        blended_price_per_million: 0.32
+        ttft_seconds: 0.55
+        context_window: 256000
+        tool_support: true
+        json_schema_support: false
+        availability_status: "Available"
+        verified_date: "2026-08-17"
+        notes: "No JSON mode at FP4 tier"
+      google_vertex:
+        model_id: "qwen3-coder-480b-a35b"
+        tokens_per_second: 163
+        input_price_per_million: 0.38
+        blended_price_per_million: 0.61
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+
+  # ──────────────────────────────────────────────────────────
+  # Qwen3.6 27B
+  # ──────────────────────────────────────────────────────────
+  qwen3_6_27b:
+    canonical_name: "Qwen3.6 27B Instruct"
+    developer: "Alibaba Qwen Team"
+    release_date: "2026-04"
+    classification: open_source
+    license: "Apache 2.0"
+    model_family: "Qwen3.6"
+    architecture: "Dense"
+    total_parameters_B: 27
+    context_window_claimed: 262144
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: true
+    vision_modalities:
+      - image
+      - video
+    supports_reasoning: true
+    languages_supported: 201
+    known_strengths:
+      - "Apache 2.0 — unrestricted"
+      - "Dense model — predictable latency"
+      - "10+ providers (most provider coverage of any model in ledger)"
+      - "Multimodal (text/image/video)"
+      - "Fast on Groq"
+    known_weaknesses:
+      - "27B dense — lower capability than MoE models at same parameter count"
+      - "262K context limit"
+    evidence_confidence: "Medium"
+    benchmark_scores:
+      artificial_analysis_coding_index: 53.7
+    providers:
+      chutes:
+        model_id: "Qwen/Qwen3.6-27B-Instruct"
+        input_price_per_million: 0.30
+        output_price_per_million: 2.00
+        availability_status: "Available"
+      deepinfra:
+        model_id: "Qwen/Qwen3.6-27B-Instruct"
+        input_price_per_million: 0.32
+        output_price_per_million: 3.20
+        context_window: 262144
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+        recommended_for:
+          - Portfolio C Design Agent
+          - Budget fallback for vision tasks
+      morph:
+        input_price_per_million: 0.289
+        output_price_per_million: 2.40
+      groq:
+        model_id: "qwen3.6-27b-instruct"
+        input_price_per_million: 0.84
+        context_window: 131072
+        tool_support: true
+
+  # ──────────────────────────────────────────────────────────
+  # GPT-OSS-120B (OpenAI open-weight)
+  # ──────────────────────────────────────────────────────────
+  gpt_oss_120b:
+    canonical_name: "GPT-OSS-120B"
+    developer: "OpenAI (open-weight release)"
+    classification: open_weight
+    license: "OSS (verify exact terms on OpenAI model card)"
+    architecture: "Dense"
+    total_parameters_B: 120
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    known_strengths:
+      - "Extremely fast (~3,000 t/s on Cerebras)"
+      - "Good tool calling (best quality at reasoning_effort=high per SambaNova)"
+      - "Strict JSON schema mode on SambaNova"
+      - "Available on multiple speed-optimized providers"
+    known_weaknesses:
+      - "Only available on specialist providers (Groq, Cerebras, SambaNova)"
+      - "No vision"
+      - "131K context on Groq"
+      - "Limited coding benchmark evidence"
+    evidence_confidence: "Medium"
+    providers:
+      groq:
+        model_id: "gpt-oss-120b"
+        input_price_per_million: 0.35
+        output_price_per_million: 0.75
+        context_window: 131072
+        tokens_per_second: 476
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+        recommended_for:
+          - JARVIS Orchestrator (fallback)
+          - Security Agent (fallback)
+          - High-speed structured output
+      cerebras:
+        model_id: "gpt-oss-120b"
+        input_price_per_million: 0.35
+        output_price_per_million: 0.75
+        tokens_per_second: 3000
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+
+  # ──────────────────────────────────────────────────────────
+  # GPT-OSS-20B (OpenAI open-weight — ultra-fast)
+  # ──────────────────────────────────────────────────────────
+  gpt_oss_20b:
+    canonical_name: "GPT-OSS-20B"
+    developer: "OpenAI (open-weight release)"
+    classification: open_weight
+    license: "OSS (verify exact terms)"
+    architecture: "Dense"
+    total_parameters_B: 20
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    benchmark_scores:
+      groq_tokens_per_second: 938
+    providers:
+      groq:
+        model_id: "gpt-oss-20b"
+        input_price_per_million: 0.15
+        output_price_per_million: 0.60
+        context_window: 131072
+        tokens_per_second: 938
+        tool_support: true
+        availability_status: "Available"
+        recommended_for:
+          - Ultra-fast routing / classification tasks
+
+  # ──────────────────────────────────────────────────────────
+  # Llama 3.3 70B (Meta)
+  # ──────────────────────────────────────────────────────────
+  llama_3_3_70b:
+    canonical_name: "Llama 3.3 70B Instruct"
+    developer: "Meta"
+    classification: open_weight
+    license: "Llama 4 Community License"
+    license_notes: "Commercial use permitted; restrictions above 700M monthly active users"
+    architecture: "Dense"
+    total_parameters_B: 70
+    context_window_claimed: 131072
+    supports_tools: true
+    supports_json_schema: true
+    supports_vision: false
+    evidence_confidence: "High"
+    providers:
+      groq:
+        model_id: "llama-3.3-70b-instruct"
+        input_price_per_million: 0.59
+        output_price_per_million: 0.79
+        context_window: 131072
+        tokens_per_second: 316
+        tool_support: true
+        json_schema_support: true
+        availability_status: "Available"
+      together_ai:
+        model_id: "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+        input_price_per_million: 0.88
+        output_price_per_million: 0.88
+        availability_status: "Available"
+      deepinfra:
+        model_id: "meta-llama/Meta-Llama-3.3-70B-Instruct"
+        input_price_per_million: 0.23
+        output_price_per_million: 0.40
+        availability_status: "Available"
+        recommended_for:
+          - Budget general-purpose fallback
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROPRIETARY BASELINES (quality comparison only — not for default use)
+# ─────────────────────────────────────────────────────────────────────────────
+
+proprietary_baselines:
+  claude_opus_4_8:
+    canonical_name: "Claude Opus 4.8"
+    developer: "Anthropic"
+    classification: proprietary
+    license: "Anthropic API Terms"
+    benchmark_scores:
+      swe_bench_verified: "88.6%"
+      swe_bench_pro: "69.2%"
+      terminal_bench_2_1: "85.0"
+    pricing:
+      input_per_million: 5.00
+      output_per_million: 25.00
+    usage_in_jarvis: "Quality baseline only — not default"
+
+  claude_sonnet_5:
+    canonical_name: "Claude Sonnet 5"
+    developer: "Anthropic"
+    classification: proprietary
+    benchmark_scores:
+      swe_bench_pro: "~55%"
+    pricing:
+      input_per_million: 2.00
+      output_per_million: 10.00
+    usage_in_jarvis: "Quality baseline only — not default"
+
+  gpt_5_5:
+    canonical_name: "GPT-5.5"
+    developer: "OpenAI"
+    classification: proprietary
+    benchmark_scores:
+      swe_bench_pro: "58.6%"
+    usage_in_jarvis: "Quality baseline only — not default"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MODELS NOT RECOMMENDED — DOCUMENTED FOR AUDIT TRAIL
+# ─────────────────────────────────────────────────────────────────────────────
+
+rejected_models:
+  composer_2_5:
+    rejection_reason: "Does not exist as an external hosted API; Cursor-internal only"
+  gemma_3_27b:
+    rejection_reason: "No OpenHands Index score; outperformed on agentic coding by Devstral Small at same price"
+  llama_4_scout:
+    rejection_reason: "Outperformed on agentic coding tasks by MiniMax M3, Devstral Small, and Laguna S 2.1"
+  deepseek_v4_flash_as_primary_coding_agent:
+    rejection_reason: "53.8% real-world agent task success rate too low for primary implementation use"
+  qwen3_coder_480b_as_primary:
+    rejection_reason: "SWE-bench Pro 38.7% vs MiniMax M3 59%; JSON mode unavailable at cheapest tier"
+  seed_2_1_turbo:
+    rejection_reason: "Proprietary; China-cloud only (Volcano Engine); no confirmed Western API endpoint"
+  bytedance_seed_family:
+    rejection_reason: "Proprietary; limited Western access documentation"
+  self_hosted_ollama_vllm:
+    rejection_reason: "Violates hard constraint: no self-hosting"

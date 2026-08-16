@@ -1,11 +1,20 @@
 # Worker decision (Phase 1)
 
-**Date:** 2026-08-16
+**Date:** 2026-08-17 (updated)
 
-**Choice:** `WORKER=fallback` first (scoped file/shell/git ReAct loop). OpenHands is behind the same `Worker` protocol in `src/jarvis/workers/openhands.py` and is **not** the default until Docker/WSL mounts are proven.
+**Default:** `WORKER=openhands` — real [OpenHands Software Agent SDK](https://docs.openhands.dev/sdk/guides/agent-server/overview).
 
-**Why:** Constitution allows a thin runner if OpenHands on Windows burns time. Proof of life is a branch/PR, not a perfect OpenHands install.
+| Docker Desktop engine | What runs |
+|---|---|
+| Up (`docker info` succeeds) | `DockerWorkspace` + `ghcr.io/openhands/agent-server:latest-python` |
+| Down | OpenHands **local** workspace on the product dir — still OpenHands, not the thin ReAct fallback |
 
-**OpenHands:** set `WORKER=openhands` after the adapter is implemented. If the Docker mount is empty, the adapter must fail — not report success.
+**Model:** OpenHands uses the agent entry from `config/model-routing.yaml` (`openhands_settings.model`), typically `openrouter/minimax/minimax-m3` for backend. See [`models.md`](models.md).
 
-**Kill switch:** Ctrl+C on `jarvis build`; `docker compose --profile offline down` for local Postgres fallback.
+**Fallback** (`WORKER=fallback`) stays for emergencies if the SDK is unavailable; it also resolves models via the Portfolio B router.
+
+**Why it was fallback before:** proof of life shipped before OpenHands was wired, because Docker Desktop was not running. The constitution allows that. It does not require staying on fallback forever.
+
+**Start Docker Desktop** if you want the isolated container path. Until then, local OpenHands is the working path.
+
+**Kill switch:** Ctrl+C on `jarvis build`. Stop Docker Desktop to stop containers.
